@@ -110,6 +110,21 @@
     "cache_ttl_seconds": 3600,
     "max_concurrent_requests": 10,
     "request_timeout_seconds": 30
+  },
+
+  "database_advanced": {
+    "max_db_requests_per_minute": 100,
+    "connection_pool_size": 10,
+    "connection_pool_recycle": 3600,
+    "query_timeout_seconds": 30,
+    "bulk_operation_batch_size": 500
+  },
+
+  "scheduler": {
+    "enabled": true,
+    "class_attachment_check_interval_minutes": 3,
+    "auto_cleanup_interval_hours": 24,
+    "max_concurrent_tasks": 5
   }
 }
 

@@ -1,3 +1,6 @@
 streamlit
 openai
 sqlalchemy
+numpy
+aiofiles
+apscheduler

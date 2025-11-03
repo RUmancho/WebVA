@@ -1,4 +1,5 @@
 import streamlit as st
+from typing import Dict, Any
 from auth import auth_manager
 from database import db
 from chatbot import chatbot
@@ -7,12 +8,23 @@ from testing import testing_manager
 from formulas import formula_manager
 from config import PAGE_CONFIG
 from datetime import datetime, timedelta
+from scheduler import init_scheduler, start_scheduler, add_class_attachment_job, get_scheduler_status
 
-def main():
+def main() -> None:
     """Основная функция приложения"""
     try:
         # Настройка страницы
         st.set_page_config(**PAGE_CONFIG)
+        
+        # Инициализация планировщика при первом запуске
+        if 'scheduler_initialized' not in st.session_state:
+            try:
+                init_scheduler()
+                add_class_attachment_job(db)
+                start_scheduler()
+                st.session_state['scheduler_initialized'] = True
+            except Exception as e:
+                print(f"Ошибка инициализации планировщика: {e}")
         
         # Инициализация состояния сессии
         auth_manager.init_session_state()
@@ -442,7 +454,7 @@ def show_teachers_list(user):
         st.error(f"Ошибка отображения списка учителей: {e}")
         print(f"Ошибка отображения списка учителей: {e}")
 
-def show_teacher_students_tree(user):
+def show_teacher_students_tree(user: Dict[str, Any]) -> None:
     """Отображение древовидной структуры учеников учителя"""
     try:
         st.subheader("🌳 Мои ученики (древовидная структура)")
@@ -452,27 +464,99 @@ def show_teacher_students_tree(user):
         
         if not tree:
             st.info("У вас пока нет прикрепленных учеников")
-            return
+        else:
+            st.info("💡 Структура: Город → Школа → Класс → Ученики. 🟢 - в сети, 🔴 - не в сети")
+            
+            # Отображение дерева
+            for city, schools in tree.items():
+                with st.expander(f"🏙️ {city} ({sum(len(classes) for school in schools.values() for classes in school.values())} учеников)", expanded=False):
+                    for school, classes in schools.items():
+                        st.markdown(f"### 🏫 {school}")
+                        
+                        for class_num, students in classes.items():
+                            st.markdown(f"#### 📚 Класс {class_num} ({len(students)} учеников)")
+                            
+                            for student in students:
+                                status_icon = "🟢" if student.get('is_online', False) else "🔴"
+                                st.write(f"{status_icon} {student['first_name']} {student['last_name']} ({student['email']})")
+                            
+                            st.markdown("---")
         
-        st.info("💡 Структура: Город → Школа → Класс → Ученики. 🟢 - в сети, 🔴 - не в сети")
+        st.markdown("---")
         
-        # Отображение дерева
-        for city, schools in tree.items():
-            with st.expander(f"🏙️ {city} ({sum(len(classes) for school in schools.values() for classes in school.values())} учеников)", expanded=False):
-                for school, classes in schools.items():
-                    st.markdown(f"### 🏫 {school}")
+        # Новая система автоматического прикрепления классов
+        st.subheader("🔄 Автоматическое прикрепление класса")
+        
+        with st.expander("📝 Создать задачу автоматического прикрепления", expanded=False):
+            with st.form("create_attachment_task"):
+                st.write("**Система будет автоматически искать и прикреплять учеников каждые 3 минуты**")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    city = st.text_input("Город*", placeholder="Москва", value=user.get('city', ''))
+                    school = st.text_input("Школа*", placeholder="МБОУ СОШ №1", value=user.get('school', ''))
+                
+                with col2:
+                    class_number = st.text_input("Класс*", placeholder="10А")
+                    target_count = st.number_input("Количество учеников в классе*", 
+                                                  min_value=1, max_value=50, value=25)
+                
+                submit_task = st.form_submit_button("🚀 Запустить автоприкрепление", type="primary")
+                
+                if submit_task:
+                    if not city or not school or not class_number:
+                        st.error("Пожалуйста, заполните все обязательные поля")
+                    else:
+                        success, result = db.create_attachment_task(
+                            user['id'], city, school, class_number, target_count
+                        )
+                        if success:
+                            st.success(f"✅ Задача создана! Система начнет автоматический поиск учеников.")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {result}")
+        
+        # Отображение активных задач прикрепления
+        attachment_tasks = db.get_teacher_attachment_tasks(user['id'])
+        
+        if attachment_tasks:
+            st.markdown("---")
+            st.subheader("📋 Мои задачи автоприкрепления")
+            
+            for task in attachment_tasks:
+                status_color = "🟢" if task['is_active'] else "🔴"
+                progress = task['progress_percentage']
+                
+                with st.container():
+                    col1, col2, col3 = st.columns([3, 2, 1])
                     
-                    for class_num, students in classes.items():
-                        st.markdown(f"#### 📚 Класс {class_num} ({len(students)} учеников)")
-                        
-                        for student in students:
-                            status_icon = "🟢" if student.get('is_online', False) else "🔴"
-                            st.write(f"{status_icon} {student['first_name']} {student['last_name']} ({student['email']})")
-                        
-                        st.markdown("---")
+                    with col1:
+                        st.write(f"{status_color} **{task['city']}, {task['school']}, {task['class_number']}**")
+                        st.write(f"Прогресс: {task['current_student_count']}/{task['target_student_count']} ({progress:.1f}%)")
+                        st.progress(progress / 100.0)
+                    
+                    with col2:
+                        st.write(f"**Создана:** {task['created_at']}")
+                        if task['is_active']:
+                            st.write(f"**Последняя проверка:** {task['last_check_time'] or 'Еще не проверялась'}")
+                        else:
+                            st.write(f"**Статус:** {'Завершена' if task['is_completed'] else 'Отменена'}")
+                    
+                    with col3:
+                        if task['is_active']:
+                            if st.button("❌ Отменить", key=f"cancel_task_{task['id']}"):
+                                success, msg = db.cancel_attachment_task(task['id'], user['id'])
+                                if success:
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                    
+                    st.markdown("---")
         
-        # Кнопка запуска автоматического прикрепления
-        if st.button("🔄 Запустить автоматическое прикрепление учеников"):
+        # Кнопка запуска старой системы (для обратной совместимости)
+        st.markdown("---")
+        if st.button("🔄 Запустить разовое прикрепление (старая система)"):
             with st.spinner("Поиск и прикрепление учеников..."):
                 success, message = db.auto_match_teachers_students()
                 if success:

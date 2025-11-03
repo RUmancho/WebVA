@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
+from typing import Tuple, List, Dict, Any, Optional
 from sqlalchemy import create_engine, and_, or_
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 import hashlib
+import numpy as np
 from datetime import datetime, timedelta
 from config import DATABASE_URL
-from models import Base, User, StudentTeacherRelation, TeacherRequest, Call, LessonRecord
+from config_manager import get_config_value, log_info, log_error, log_warning
+from models import Base, User, StudentTeacherRelation, TeacherRequest, Call, LessonRecord, ClassAttachmentTask
 
 class Database:
     """Класс для работы с базой данных через SQLAlchemy ORM"""
@@ -13,32 +16,42 @@ class Database:
     def __init__(self):
         """Инициализация базы данных"""
         try:
-            self.engine = create_engine(DATABASE_URL, echo=False)
+            # Получаем настройки из конфига
+            pool_size = get_config_value("database_advanced.connection_pool_size", 10)
+            pool_recycle = get_config_value("database_advanced.connection_pool_recycle", 3600)
+            
+            self.engine = create_engine(
+                DATABASE_URL, 
+                echo=False,
+                pool_size=pool_size,
+                pool_recycle=pool_recycle,
+                pool_pre_ping=True
+            )
             self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
             self.Session = scoped_session(self.SessionLocal)
             self.init_database()
-            print("База данных успешно инициализирована с SQLAlchemy")
+            log_info("database.py", "База данных успешно инициализирована с SQLAlchemy")
         except Exception as e:
-            print(f"Ошибка инициализации базы данных: {e}")
+            log_error("database.py", f"Ошибка инициализации базы данных: {e}")
     
-    def init_database(self):
+    def init_database(self) -> bool:
         """Создание таблиц в базе данных"""
         try:
             Base.metadata.create_all(bind=self.engine)
             return True
         except SQLAlchemyError as e:
-            print(f"Ошибка создания таблиц: {e}")
+            log_error("database.py", f"Ошибка создания таблиц: {e}")
             return False
     
     def get_session(self):
         """Получение сессии базы данных"""
         return self.Session()
     
-    def hash_password(self, password):
+    def hash_password(self, password: str) -> str:
         """Хеширование пароля"""
         return hashlib.sha256(password.encode("utf-8")).hexdigest()
     
-    def register_user(self, user_data):
+    def register_user(self, user_data: Dict[str, Any]) -> Tuple[bool, Any]:
         """Регистрация нового пользователя"""
         session = self.get_session()
         try:
@@ -82,7 +95,7 @@ class Database:
         finally:
             session.close()
     
-    def authenticate_user(self, email, password):
+    def authenticate_user(self, email: str, password: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """Аутентификация пользователя"""
         session = self.get_session()
         try:
@@ -116,7 +129,7 @@ class Database:
         finally:
             session.close()
     
-    def get_teachers(self):
+    def get_teachers(self) -> List[Dict[str, Any]]:
         """Получение списка всех учителей"""
         session = self.get_session()
         try:
@@ -141,7 +154,7 @@ class Database:
         finally:
             session.close()
     
-    def get_user_by_id(self, user_id):
+    def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Получение пользователя по ID"""
         session = self.get_session()
         try:
@@ -167,7 +180,7 @@ class Database:
         finally:
             session.close()
     
-    def delete_user(self, user_id, email, password):
+    def delete_user(self, user_id: int, email: str, password: str) -> Tuple[bool, str]:
         """Удаление пользователя с подтверждением"""
         session = self.get_session()
         try:
@@ -211,7 +224,7 @@ class Database:
         finally:
             session.close()
     
-    def create_teacher_request(self, teacher_id, student_id, message=""):
+    def create_teacher_request(self, teacher_id: int, student_id: int, message: str = "") -> Tuple[bool, str]:
         """Создание заявки от учителя к ученику"""
         session = self.get_session()
         try:
@@ -248,7 +261,7 @@ class Database:
         finally:
             session.close()
     
-    def get_student_requests(self, student_id):
+    def get_student_requests(self, student_id: int) -> List[Dict[str, Any]]:
         """Получение заявок для ученика"""
         session = self.get_session()
         try:
@@ -279,7 +292,7 @@ class Database:
         finally:
             session.close()
     
-    def accept_teacher_request(self, request_id, student_id):
+    def accept_teacher_request(self, request_id: int, student_id: int) -> Tuple[bool, str]:
         """Принятие заявки от учителя"""
         session = self.get_session()
         try:
@@ -318,7 +331,7 @@ class Database:
         finally:
             session.close()
     
-    def reject_teacher_request(self, request_id, student_id):
+    def reject_teacher_request(self, request_id: int, student_id: int) -> Tuple[bool, str]:
         """Отклонение заявки от учителя"""
         session = self.get_session()
         try:
@@ -347,7 +360,7 @@ class Database:
         finally:
             session.close()
     
-    def get_student_teachers(self, student_id):
+    def get_student_teachers(self, student_id: int) -> List[Dict[str, Any]]:
         """Получение списка учителей ученика"""
         session = self.get_session()
         try:
@@ -718,7 +731,7 @@ class Database:
         finally:
             session.close()
     
-    def auto_match_teachers_students(self):
+    def auto_match_teachers_students(self) -> Tuple[bool, str]:
         """Автоматическое прикрепление учеников к учителям по городу, школе и классу"""
         session = self.get_session()
         try:
@@ -984,7 +997,7 @@ class Database:
         finally:
             session.close()
     
-    def get_teacher_students_tree(self, teacher_id):
+    def get_teacher_students_tree(self, teacher_id: int) -> Dict[str, Any]:
         """Получить структуру учеников учителя в виде дерева (город -> школа -> класс -> ученики)"""
         session = self.get_session()
         try:
@@ -1021,8 +1034,348 @@ class Database:
             return tree
             
         except SQLAlchemyError as e:
-            print(f"Ошибка получения дерева учеников: {e}")
+            log_error("database.py", f"Ошибка получения дерева учеников: {e}")
             return {}
+        finally:
+            session.close()
+    
+    # ============= МЕТОДЫ ДЛЯ АВТОМАТИЧЕСКОГО ПРИКРЕПЛЕНИЯ КЛАССОВ =============
+    
+    def create_attachment_task(self, teacher_id: int, city: str, school: str, 
+                               class_number: str, target_student_count: int) -> Tuple[bool, Any]:
+        """
+        Создать задачу автоматического прикрепления класса
+        
+        Args:
+            teacher_id: ID учителя
+            city: Город
+            school: Школа
+            class_number: Номер класса
+            target_student_count: Целевое количество учеников
+            
+        Returns:
+            Tuple[bool, Any]: (успех, ID задачи или сообщение об ошибке)
+        """
+        session = self.get_session()
+        try:
+            # Проверяем, нет ли уже активной задачи для этого класса
+            existing_task = session.query(ClassAttachmentTask).filter(
+                and_(
+                    ClassAttachmentTask.teacher_id == teacher_id,
+                    ClassAttachmentTask.city == city,
+                    ClassAttachmentTask.school == school,
+                    ClassAttachmentTask.class_number == class_number,
+                    ClassAttachmentTask.is_active == True
+                )
+            ).first()
+            
+            if existing_task:
+                return False, "Активная задача для этого класса уже существует"
+            
+            # Создаем новую задачу
+            new_task = ClassAttachmentTask(
+                teacher_id=teacher_id,
+                city=city,
+                school=school,
+                class_number=class_number,
+                target_student_count=target_student_count,
+                current_student_count=0,
+                is_active=True
+            )
+            
+            session.add(new_task)
+            session.commit()
+            task_id = new_task.id
+            
+            log_info("database.py", f"Создана задача прикрепления {task_id} для учителя {teacher_id}")
+            return True, task_id
+            
+        except SQLAlchemyError as e:
+            session.rollback()
+            log_error("database.py", f"Ошибка создания задачи прикрепления: {e}")
+            return False, f"Ошибка базы данных: {e}"
+        finally:
+            session.close()
+    
+    def get_active_attachment_tasks(self) -> List[Dict[str, Any]]:
+        """
+        Получить все активные задачи прикрепления
+        
+        Returns:
+            List[Dict]: Список активных задач
+        """
+        session = self.get_session()
+        try:
+            tasks = session.query(ClassAttachmentTask).filter(
+                ClassAttachmentTask.is_active == True
+            ).all()
+            
+            tasks_list = []
+            for task in tasks:
+                tasks_list.append({
+                    'id': task.id,
+                    'teacher_id': task.teacher_id,
+                    'city': task.city,
+                    'school': task.school,
+                    'class_number': task.class_number,
+                    'target_student_count': task.target_student_count,
+                    'current_student_count': task.current_student_count,
+                    'last_check_time': task.last_check_time.isoformat() if task.last_check_time else None,
+                    'created_at': task.created_at.isoformat() if task.created_at else None
+                })
+            
+            return tasks_list
+            
+        except SQLAlchemyError as e:
+            log_error("database.py", f"Ошибка получения активных задач: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def get_teacher_attachment_tasks(self, teacher_id: int) -> List[Dict[str, Any]]:
+        """
+        Получить задачи прикрепления для конкретного учителя
+        
+        Args:
+            teacher_id: ID учителя
+            
+        Returns:
+            List[Dict]: Список задач учителя
+        """
+        session = self.get_session()
+        try:
+            tasks = session.query(ClassAttachmentTask).filter(
+                ClassAttachmentTask.teacher_id == teacher_id
+            ).order_by(ClassAttachmentTask.created_at.desc()).all()
+            
+            tasks_list = []
+            for task in tasks:
+                tasks_list.append({
+                    'id': task.id,
+                    'city': task.city,
+                    'school': task.school,
+                    'class_number': task.class_number,
+                    'target_student_count': task.target_student_count,
+                    'current_student_count': task.current_student_count,
+                    'is_active': task.is_active,
+                    'progress_percentage': task.progress_percentage,
+                    'is_completed': task.is_completed,
+                    'last_check_time': task.last_check_time.strftime('%Y-%m-%d %H:%M:%S') if task.last_check_time else None,
+                    'created_at': task.created_at.strftime('%Y-%m-%d %H:%M:%S') if task.created_at else None,
+                    'completed_at': task.completed_at.strftime('%Y-%m-%d %H:%M:%S') if task.completed_at else None
+                })
+            
+            return tasks_list
+            
+        except SQLAlchemyError as e:
+            log_error("database.py", f"Ошибка получения задач учителя: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def process_single_attachment_task(self, task_id: int) -> Dict[str, Any]:
+        """
+        Обработать одну задачу прикрепления (найти и прикрепить учеников)
+        
+        Args:
+            task_id: ID задачи
+            
+        Returns:
+            Dict: Результат обработки
+        """
+        session = self.get_session()
+        try:
+            from models import Notification
+            
+            # Получаем задачу
+            task = session.query(ClassAttachmentTask).filter(
+                ClassAttachmentTask.id == task_id
+            ).first()
+            
+            if not task:
+                return {'success': False, 'message': 'Задача не найдена'}
+            
+            if not task.is_active:
+                return {'success': False, 'message': 'Задача неактивна'}
+            
+            if task.is_completed:
+                self.complete_attachment_task(task_id)
+                return {'success': True, 'attached_count': 0, 'message': 'Задача уже завершена'}
+            
+            # Обновляем время последней проверки
+            task.last_check_time = datetime.utcnow()
+            
+            # Находим подходящих учеников
+            students = session.query(User).filter(
+                and_(
+                    User.role == 'Ученик',
+                    User.city == task.city,
+                    User.school == task.school,
+                    User.class_number == task.class_number
+                )
+            ).all()
+            
+            if not students:
+                session.commit()
+                return {'success': True, 'attached_count': 0, 'message': 'Подходящих учеников не найдено'}
+            
+            # Используем numpy для оптимизации обработки больших списков
+            student_ids = np.array([s.id for s in students])
+            
+            # Получаем уже прикрепленных учеников
+            existing_relations = session.query(StudentTeacherRelation.student_id).filter(
+                and_(
+                    StudentTeacherRelation.teacher_id == task.teacher_id,
+                    StudentTeacherRelation.student_id.in_(student_ids.tolist())
+                )
+            ).all()
+            
+            existing_ids = set([r.student_id for r in existing_relations])
+            
+            # Фильтруем новых учеников используя numpy
+            new_student_ids = np.setdiff1d(student_ids, list(existing_ids))
+            
+            # Ограничиваем количество прикрепляемых учеников
+            remaining_slots = task.target_student_count - task.current_student_count
+            if remaining_slots <= 0:
+                self.complete_attachment_task(task_id)
+                session.commit()
+                return {'success': True, 'attached_count': 0, 'message': 'Достигнут лимит учеников'}
+            
+            students_to_attach = new_student_ids[:remaining_slots]
+            
+            # Прикрепляем учеников пакетом
+            attached_count = 0
+            batch_size = get_config_value("database_advanced.bulk_operation_batch_size", 500)
+            
+            for i in range(0, len(students_to_attach), batch_size):
+                batch = students_to_attach[i:i + batch_size]
+                
+                for student_id in batch:
+                    # Создаем связь
+                    new_relation = StudentTeacherRelation(
+                        student_id=int(student_id),
+                        teacher_id=task.teacher_id
+                    )
+                    session.add(new_relation)
+                    
+                    # Создаем уведомления
+                    student = session.query(User).filter(User.id == int(student_id)).first()
+                    if student:
+                        # Уведомление ученику
+                        student_notification = Notification(
+                            user_id=int(student_id),
+                            title="Вы прикреплены к учителю",
+                            message=f"Вы были автоматически прикреплены к учителю из вашего класса ({task.city}, {task.school}, {task.class_number}).",
+                            notification_type='teacher_assigned',
+                            related_user_id=task.teacher_id
+                        )
+                        session.add(student_notification)
+                    
+                    attached_count += 1
+                
+                # Коммитим батч
+                session.commit()
+            
+            # Уведомление учителю
+            if attached_count > 0:
+                teacher_notification = Notification(
+                    user_id=task.teacher_id,
+                    title="Новые ученики прикреплены",
+                    message=f"Автоматически прикреплено {attached_count} учеников из класса {task.class_number} ({task.city}, {task.school}).",
+                    notification_type='students_attached'
+                )
+                session.add(teacher_notification)
+            
+            # Обновляем счетчик
+            task.current_student_count += attached_count
+            session.commit()
+            
+            # Проверяем завершение
+            if task.is_completed:
+                self.complete_attachment_task(task_id)
+            
+            log_info("database.py", f"Задача {task_id}: прикреплено {attached_count} учеников")
+            return {
+                'success': True, 
+                'attached_count': attached_count,
+                'total': task.current_student_count,
+                'target': task.target_student_count
+            }
+            
+        except SQLAlchemyError as e:
+            session.rollback()
+            log_error("database.py", f"Ошибка обработки задачи {task_id}: {e}")
+            return {'success': False, 'message': f"Ошибка базы данных: {e}"}
+        finally:
+            session.close()
+    
+    def complete_attachment_task(self, task_id: int) -> Tuple[bool, str]:
+        """
+        Завершить задачу прикрепления
+        
+        Args:
+            task_id: ID задачи
+            
+        Returns:
+            Tuple[bool, str]: (успех, сообщение)
+        """
+        session = self.get_session()
+        try:
+            task = session.query(ClassAttachmentTask).filter(
+                ClassAttachmentTask.id == task_id
+            ).first()
+            
+            if not task:
+                return False, "Задача не найдена"
+            
+            task.is_active = False
+            task.completed_at = datetime.utcnow()
+            session.commit()
+            
+            log_info("database.py", f"Задача {task_id} завершена")
+            return True, "Задача завершена"
+            
+        except SQLAlchemyError as e:
+            session.rollback()
+            log_error("database.py", f"Ошибка завершения задачи: {e}")
+            return False, f"Ошибка базы данных: {e}"
+        finally:
+            session.close()
+    
+    def cancel_attachment_task(self, task_id: int, teacher_id: int) -> Tuple[bool, str]:
+        """
+        Отменить задачу прикрепления
+        
+        Args:
+            task_id: ID задачи
+            teacher_id: ID учителя (для проверки прав)
+            
+        Returns:
+            Tuple[bool, str]: (успех, сообщение)
+        """
+        session = self.get_session()
+        try:
+            task = session.query(ClassAttachmentTask).filter(
+                and_(
+                    ClassAttachmentTask.id == task_id,
+                    ClassAttachmentTask.teacher_id == teacher_id
+                )
+            ).first()
+            
+            if not task:
+                return False, "Задача не найдена или нет прав доступа"
+            
+            task.is_active = False
+            session.commit()
+            
+            log_info("database.py", f"Задача {task_id} отменена учителем {teacher_id}")
+            return True, "Задача отменена"
+            
+        except SQLAlchemyError as e:
+            session.rollback()
+            log_error("database.py", f"Ошибка отмены задачи: {e}")
+            return False, f"Ошибка базы данных: {e}"
         finally:
             session.close()
 

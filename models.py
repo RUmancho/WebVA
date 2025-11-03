@@ -187,3 +187,37 @@ class ChatMessage(Base):
     
     def __repr__(self):
         return f"<ChatMessage(id={self.id}, sender_id={self.sender_id}, receiver_id={self.receiver_id})>"
+
+class ClassAttachmentTask(Base):
+    """Модель задачи автоматического прикрепления класса"""
+    __tablename__ = 'class_attachment_tasks'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    teacher_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    city = Column(String(100), nullable=False)
+    school = Column(String(255), nullable=False)
+    class_number = Column(String(10), nullable=False)
+    target_student_count = Column(Integer, nullable=False)  # Целевое кол-во учеников
+    current_student_count = Column(Integer, default=0)  # Текущее кол-во прикрепленных
+    is_active = Column(Boolean, default=True)  # Активна ли задача
+    last_check_time = Column(DateTime, default=datetime.utcnow)  # Время последней проверки
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)  # Когда задача была завершена
+    
+    # Связи
+    teacher = relationship("User", backref="attachment_tasks")
+    
+    @property
+    def is_completed(self) -> bool:
+        """Проверка завершена ли задача"""
+        return self.current_student_count >= self.target_student_count
+    
+    @property
+    def progress_percentage(self) -> float:
+        """Прогресс выполнения задачи в процентах"""
+        if self.target_student_count == 0:
+            return 0.0
+        return (self.current_student_count / self.target_student_count) * 100
+    
+    def __repr__(self):
+        return f"<ClassAttachmentTask(id={self.id}, teacher_id={self.teacher_id}, {self.city}/{self.school}/{self.class_number}, {self.current_student_count}/{self.target_student_count})>"
