@@ -4,7 +4,9 @@ from database import db
 from chatbot import chatbot
 from theory import theory_manager
 from testing import testing_manager
+from formulas import formula_manager
 from config import PAGE_CONFIG
+from datetime import datetime, timedelta
 
 def main():
     """Основная функция приложения"""
@@ -91,13 +93,13 @@ def show_dashboard():
         auth_manager.show_user_profile()
         
         # Навигация
-        tabs = st.tabs(["🏠 Главная", "👨‍🏫 Учителя", "💬 Чат-помощник", "📚 Теория", "📝 Тестирование", "📋 Заявки", "📞 Звонки", "🎥 Записи уроков"])
+        tabs = st.tabs(["🏠 Главная", "👨‍🏫 Учителя", "💬 Чат-помощник", "📚 Теория", "📝 Тестирование", "📐 Формулы", "🔔 Уведомления", "💭 Чат", "📋 Заявки", "📞 Звонки", "🎥 Записи уроков"])
         
         with tabs[0]:
             show_main_dashboard(user)
         
         with tabs[1]:
-            show_teachers_list()
+            show_teachers_list(user)
         
         with tabs[2]:
             show_chat_section()
@@ -109,12 +111,21 @@ def show_dashboard():
             show_testing_section()
         
         with tabs[5]:
-            show_requests_section(user)
+            show_formulas_section()
         
         with tabs[6]:
-            show_calls_section(user)
+            show_notifications_section(user)
         
         with tabs[7]:
+            show_personal_chat_section(user)
+        
+        with tabs[8]:
+            show_requests_section(user)
+        
+        with tabs[9]:
+            show_calls_section(user)
+        
+        with tabs[10]:
             show_lesson_records_section(user)
             
     except Exception as e:
@@ -224,17 +235,158 @@ def show_teacher_info(user):
         st.error(f"Ошибка отображения информации учителя: {e}")
         print(f"Ошибка отображения информации учителя: {e}")
 
-def show_teachers_list():
+def show_formulas_section():
+    """Отображение секции формул"""
+    try:
+        formula_manager.show_formula_interface()
+    except Exception as e:
+        st.error(f"Ошибка секции формул: {e}")
+        print(f"Ошибка секции формул: {e}")
+
+def show_notifications_section(user):
+    """Отображение секции уведомлений"""
+    try:
+        st.header("🔔 Уведомления")
+        
+        # Получение уведомлений
+        notifications = db.get_user_notifications(user['id'])
+        unread_count = len([n for n in notifications if not n['is_read']])
+        
+        if unread_count > 0:
+            st.info(f"📬 У вас {unread_count} непрочитанных уведомлений")
+        
+        # Фильтр
+        show_all = st.checkbox("Показать все уведомления", value=True)
+        
+        if not notifications:
+            st.info("У вас пока нет уведомлений")
+            return
+        
+        # Отображение уведомлений
+        for notification in notifications:
+            if not show_all and notification['is_read']:
+                continue
+            
+            with st.expander(f"{'🔴' if not notification['is_read'] else '✅'} {notification['title']} - {notification['created_at']}"):
+                st.write(notification['message'])
+                
+                if not notification['is_read']:
+                    if st.button("Отметить как прочитанное", key=f"read_{notification['id']}"):
+                        success, message = db.mark_notification_read(notification['id'], user['id'])
+                        if success:
+                            st.success(message)
+                            st.rerun()
+                        else:
+                            st.error(message)
+        
+    except Exception as e:
+        st.error(f"Ошибка секции уведомлений: {e}")
+        print(f"Ошибка секции уведомлений: {e}")
+
+def show_personal_chat_section(user):
+    """Отображение секции личного чата"""
+    try:
+        st.header("💭 Личный чат")
+        
+        # Получение списка доступных для чата пользователей
+        if user['role'] == 'Ученик':
+            # Ученик может писать своим учителям и другим ученикам
+            teachers = db.get_student_teachers(user['id'])
+            students = db.get_all_students()
+            students = [s for s in students if s['id'] != user['id']]
+            
+            available_users = []
+            for t in teachers:
+                available_users.append({
+                    'id': t['id'],
+                    'name': f"{t['first_name']} {t['last_name']}",
+                    'role': 'Учитель',
+                    'is_online': t.get('is_online', False)
+                })
+            for s in students:
+                available_users.append({
+                    'id': s['id'],
+                    'name': f"{s['first_name']} {s['last_name']}",
+                    'role': 'Ученик',
+                    'is_online': s.get('is_online', False)
+                })
+        else:  # Учитель
+            # Учитель может писать своим ученикам
+            students = db.get_teacher_students(user['id'])
+            available_users = []
+            for s in students:
+                available_users.append({
+                    'id': s['id'],
+                    'name': f"{s['first_name']} {s['last_name']}",
+                    'role': 'Ученик',
+                    'is_online': s.get('is_online', False)
+                })
+        
+        if not available_users:
+            st.info("У вас пока нет пользователей для чата. Прикрепите учителей или учеников!")
+            return
+        
+        # Выбор собеседника
+        selected_user = st.selectbox(
+            "Выберите собеседника:",
+            options=available_users,
+            format_func=lambda x: f"{'🟢' if x['is_online'] else '🔴'} {x['name']} ({x['role']})",
+            key="chat_user_selector"
+        )
+        
+        if selected_user:
+            st.markdown("---")
+            st.subheader(f"Чат с: {selected_user['name']}")
+            
+            # Получение сообщений
+            messages = db.get_chat_messages(user['id'], selected_user['id'])
+            
+            # Отображение истории сообщений
+            chat_container = st.container()
+            with chat_container:
+                if not messages:
+                    st.info("Начните разговор!")
+                else:
+                    for message in messages:
+                        is_sender = message['sender_id'] == user['id']
+                        
+                        if is_sender:
+                            st.markdown(f"**Вы** ({message['created_at']}):")
+                            st.info(message['message_text'])
+                        else:
+                            st.markdown(f"**{selected_user['name']}** ({message['created_at']}):")
+                            st.success(message['message_text'])
+            
+            # Поле для отправки сообщения
+            with st.form(key=f"message_form_{selected_user['id']}"):
+                message_text = st.text_area("Ваше сообщение:", placeholder="Введите сообщение...")
+                submit_button = st.form_submit_button("📤 Отправить")
+                
+                if submit_button and message_text.strip():
+                    success, result = db.send_chat_message(user['id'], selected_user['id'], message_text)
+                    if success:
+                        st.success("Сообщение отправлено!")
+                        st.rerun()
+                    else:
+                        st.error(result)
+        
+    except Exception as e:
+        st.error(f"Ошибка секции чата: {e}")
+        print(f"Ошибка секции чата: {e}")
+
+def show_teachers_list(user):
     """Отображение списка учителей"""
     try:
         st.header("👨‍🏫 Учителя")
         
-        # Получение текущего пользователя
-        user = auth_manager.get_current_user()
-        
         # Для учеников показываем сначала их учителей
         if user and user['role'] == 'Ученик':
             show_student_teachers(user)
+            st.markdown("---")
+        
+        # Для учителей показываем древовидную структуру их учеников
+        if user and user['role'] == 'Учитель':
+            show_teacher_students_tree(user)
             st.markdown("---")
         
         st.subheader("🔍 Все учителя в системе")
@@ -290,6 +442,49 @@ def show_teachers_list():
         st.error(f"Ошибка отображения списка учителей: {e}")
         print(f"Ошибка отображения списка учителей: {e}")
 
+def show_teacher_students_tree(user):
+    """Отображение древовидной структуры учеников учителя"""
+    try:
+        st.subheader("🌳 Мои ученики (древовидная структура)")
+        
+        # Получение древовидной структуры
+        tree = db.get_teacher_students_tree(user['id'])
+        
+        if not tree:
+            st.info("У вас пока нет прикрепленных учеников")
+            return
+        
+        st.info("💡 Структура: Город → Школа → Класс → Ученики. 🟢 - в сети, 🔴 - не в сети")
+        
+        # Отображение дерева
+        for city, schools in tree.items():
+            with st.expander(f"🏙️ {city} ({sum(len(classes) for school in schools.values() for classes in school.values())} учеников)", expanded=False):
+                for school, classes in schools.items():
+                    st.markdown(f"### 🏫 {school}")
+                    
+                    for class_num, students in classes.items():
+                        st.markdown(f"#### 📚 Класс {class_num} ({len(students)} учеников)")
+                        
+                        for student in students:
+                            status_icon = "🟢" if student.get('is_online', False) else "🔴"
+                            st.write(f"{status_icon} {student['first_name']} {student['last_name']} ({student['email']})")
+                        
+                        st.markdown("---")
+        
+        # Кнопка запуска автоматического прикрепления
+        if st.button("🔄 Запустить автоматическое прикрепление учеников"):
+            with st.spinner("Поиск и прикрепление учеников..."):
+                success, message = db.auto_match_teachers_students()
+                if success:
+                    st.success(f"✅ {message}")
+                    st.rerun()
+                else:
+                    st.error(f"❌ {message}")
+        
+    except Exception as e:
+        st.error(f"Ошибка отображения дерева учеников: {e}")
+        print(f"Ошибка отображения дерева учеников: {e}")
+
 def show_student_teachers(user):
     """Отображение учителей ученика"""
     try:
@@ -317,7 +512,8 @@ def show_student_teachers(user):
                     st.write(f"**Город:** {teacher.get('city', 'Не указан')}")
                 
                 with col3:
-                    st.write("✅ Связан")
+                    status_icon = "🟢" if teacher.get('is_online', False) else "🔴"
+                    st.write(f"{status_icon} {'В сети' if teacher.get('is_online', False) else 'Не в сети'}")
                 
                 st.markdown("---")
         
@@ -766,6 +962,43 @@ def show_lesson_record_card(record, user, is_auto=False):
                     st.write("🤖 Авто")
                 else:
                     st.write("✏️ Ручная")
+            
+            st.markdown("---")
+            
+            # Секция комментариев
+            st.markdown("### 💬 Комментарии")
+            
+            # Получение комментариев
+            comments = db.get_video_comments(record['id'])
+            
+            if comments:
+                st.write(f"Комментариев: {len(comments)}")
+                for comment in comments:
+                    with st.container():
+                        st.markdown(f"**{comment['user_name']} ({comment['user_role']})** - {comment['created_at']}")
+                        if comment.get('timestamp'):
+                            st.caption(f"⏱️ Временная метка: {comment['timestamp']} сек")
+                        st.info(comment['comment_text'])
+            else:
+                st.info("Комментариев пока нет")
+            
+            # Форма добавления комментария
+            with st.form(key=f"comment_form_{record['id']}"):
+                st.write("**Оставить комментарий:**")
+                comment_text = st.text_area("Ваш комментарий:", placeholder="Напишите, что было непонятно...")
+                timestamp = st.number_input("Временная метка видео (секунды, необязательно):", min_value=0, value=0, step=1)
+                
+                if st.form_submit_button("💬 Добавить комментарий"):
+                    if comment_text.strip():
+                        ts = timestamp if timestamp > 0 else None
+                        success, message = db.add_video_comment(record['id'], user['id'], comment_text, ts)
+                        if success:
+                            st.success("Комментарий добавлен!")
+                            st.rerun()
+                        else:
+                            st.error(message)
+                    else:
+                        st.warning("Пожалуйста, введите текст комментария")
     
     except Exception as e:
         st.error(f"Ошибка карточки записи: {e}")

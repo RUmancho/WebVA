@@ -1,0 +1,115 @@
+{
+  "app": {
+    "title": "Система регистрации учителей и учеников",
+    "page_icon": "🎓",
+    "layout": "wide",
+    "sidebar_state": "expanded"
+  },
+  
+  "database": {
+    "name": "users.db",
+    "url_prefix": "sqlite:///",
+    "auto_backup": false,
+    "backup_interval_days": 7
+  },
+  
+  "validation": {
+    "min_name_length": 2,
+    "min_password_length": 6,
+    "max_name_length": 100,
+    "max_email_length": 255
+  },
+  
+  "ai_models": {
+    "default_model": "gpt-4o-mini",
+    "available_models": [
+      "gpt-4o",
+      "gpt-4o-mini",
+      "o1-mini",
+      "o1-preview"
+    ],
+    "temperature": 0.3,
+    "max_tokens": 2000,
+    "top_p": 1.0,
+    "frequency_penalty": 0.0,
+    "presence_penalty": 0.0,
+    "timeout_seconds": 60,
+    "max_retries": 3
+  },
+  
+  "ollama": {
+    "enabled": false,
+    "model": "deepseek-coder:6.7b",
+    "temperature": 0.3,
+    "base_url": "http://localhost:11434"
+  },
+  
+  "chat": {
+    "bot_name": "Помощник",
+    "max_history_messages": 50,
+    "system_message": "Вы - дружелюбный помощник в образовательной системе. Помогайте пользователям с вопросами о регистрации, навигации по сайту и общими вопросами об образовании. Отвечайте вежливо и по существу на русском языке."
+  },
+  
+  "logging": {
+    "enabled": {
+      "llm.py": false,
+      "auth.py": true,
+      "chatbot.py": true,
+      "config.py": true,
+      "database.py": true,
+      "formulas.py": true,
+      "main.py": true,
+      "testing.py": false,
+      "theory.py": true,
+      "validation.py": true,
+      "models.py": true,
+      "manage_users.py": true,
+      "delete_user.py": true,
+      "migrate_database.py": true
+    },
+    "global_logging": true,
+    "ai_logs": true,
+    "log_level": "INFO",
+    "log_to_file": false,
+    "log_file_path": "app.log",
+    "colored_logs": true
+  },
+  
+  "session": {
+    "timeout_minutes": 120,
+    "auto_logout": false,
+    "remember_me": true
+  },
+  
+  "security": {
+    "hash_algorithm": "pbkdf2_sha256",
+    "password_salt_rounds": 10,
+    "require_email_verification": false,
+    "max_login_attempts": 5,
+    "lockout_duration_minutes": 15
+  },
+  
+  "ui": {
+    "theme": "light",
+    "language": "ru",
+    "items_per_page": 20,
+    "show_welcome_message": true,
+    "enable_animations": true
+  },
+  
+  "features": {
+    "enable_ai_assistant": true,
+    "enable_video_calls": false,
+    "enable_file_uploads": true,
+    "enable_notifications": true,
+    "enable_student_teacher_chat": true
+  },
+  
+  "performance": {
+    "cache_enabled": true,
+    "cache_ttl_seconds": 3600,
+    "max_concurrent_requests": 10,
+    "request_timeout_seconds": 30
+  }
+}
+
