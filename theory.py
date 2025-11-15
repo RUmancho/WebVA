@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
 import streamlit as st
-import os
 from config import OPENAI_API_KEY
 
 class TheoryManager:

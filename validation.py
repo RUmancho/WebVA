@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
-import re
 from config import MIN_NAME_LENGTH, MIN_PASSWORD_LENGTH
+import re
 
 class Validator:
     """Класс для валидации пользовательских данных"""

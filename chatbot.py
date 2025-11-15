@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
 import streamlit as st
-import os
 from datetime import datetime
 from config import CHAT_BOT_NAME, CHAT_SYSTEM_MESSAGE, OPENAI_API_KEY
 

@@ -1,10 +1,14 @@
-# -*- coding: utf-8 -*-
 import os
+
+AI_LOGS = True
 
 # ОСНОВНЫЕ НАСТРОЙКИ ПРИЛОЖЕНИЯ
 APP_TITLE = "Система регистрации учителей и учеников"
 DATABASE_NAME = "users.db"
 SESSION_STATE_KEY = "user_session"
+
+# НАСТРОЙКИ SQLALCHEMY
+DATABASE_URL = f"sqlite:///{DATABASE_NAME}"
 
 # РОЛИ ПОЛЬЗОВАТЕЛЕЙ
 USER_ROLES = ["Ученик", "Учитель"]
