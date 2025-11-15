@@ -1,4 +1,10 @@
+import os
+from pathlib import Path
+
+# Получаем абсолютный путь к папке database
+DATABASE_DIR = Path(__file__).parent.resolve()
 DATABASE_NAME = "users.db"
-DATABASE_URL = f"sqlite:///{DATABASE_NAME}"
+DATABASE_PATH = DATABASE_DIR / DATABASE_NAME
+DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 SESSION_STATE_KEY = "user_session"
 USER_ROLES = ["Ученик", "Учитель"]
