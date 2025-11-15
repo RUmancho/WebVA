@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime
 from settings import CHAT_BOT_NAME, CHAT_SYSTEM_MESSAGE, OPENAI_API_KEY
+import openai
 
 class ChatBot:
     """Класс для работы с чат-ботом поддержки"""
@@ -49,8 +50,6 @@ class ChatBot:
     def get_openai_response(self, user_message):
         """Получение ответа от OpenAI"""
         try:
-            import openai
-            
             openai.api_key = self.api_key
             
             # Подготовка сообщений для API
@@ -183,5 +182,4 @@ class ChatBot:
             }
         ]
 
-# Создание экземпляра чат-бота
 chatbot = ChatBot()

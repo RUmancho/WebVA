@@ -3,11 +3,7 @@ from openai import OpenAI
 import re
 import enum
 import datetime
-import json
-import config
 import time
-from colorama import Fore, Style, init
-init(autoreset=True)
 
 class AIMode(enum.Enum):
     HELP_PROBLEM = "help_problem"
@@ -18,7 +14,6 @@ class AIMode(enum.Enum):
     PRACTICE = "practice"
     GENERATE_TASK = "generate_task"
     
-    # Специфические режимы для разделов алгебры
     COMPUTATIONAL_SKILLS = "computational_skills"
     EXPRESSION_VALUE = "expression_value"
     FORMULAS_WORK = "formulas_work"
@@ -29,7 +24,6 @@ class AIMode(enum.Enum):
     TRIGONOMETRY = "trigonometry"
     PROBABILITY = "probability"
     
-    # Специфические режимы для разделов геометрии
     TRIANGLES = "triangles"
     QUADRILATERALS = "quadrilaterals"
     CIRCLES = "circles"
@@ -76,44 +70,6 @@ class TeacherCommands(enum.Enum):
     ATTACH_ALL = "прикрепить всех"
 
 
-def _llm_log(message: str, level: str = "INFO", request_id: str = None):
-    """Логирование событий LLM с временной меткой, цветами и эмодзи."""
-    if not config.AI_LOGS:
-        return
-    try:
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        req_info = f" [Req: {request_id}]" if request_id else ""
-        
-        # Определяем цвет и эмодзи для уровня логирования
-        if level == "INFO":
-            color = Fore.CYAN
-            emoji = "🤖"
-        elif level == "WARNING":
-            color = Fore.YELLOW
-            emoji = "⚠️"
-        elif level == "ERROR":
-            color = Fore.RED
-            emoji = "🚨"
-        elif level == "SUCCESS":
-            color = Fore.GREEN
-            emoji = "✨"
-        elif level == "DEBUG":
-            color = Fore.MAGENTA
-            emoji = "🔧"
-        else:
-            color = Fore.WHITE
-            emoji = "🤖"
-        
-        # Форматируем и выводим сообщение
-        timestamp_colored = f"{Fore.BLUE}[{timestamp}]"
-        level_colored = f"{color}[{emoji} LLM-{level}]"
-        req_colored = f"{Fore.YELLOW}{req_info}" if request_id else ""
-        message_colored = f"{Style.BRIGHT}{message}{Style.RESET_ALL}"
-        
-        print(f"{timestamp_colored} {level_colored}{req_colored} {message_colored}")
-    except Exception as e:
-        print(f"{Fore.RED}🚨 Ошибка LLM логирования: {e}{Style.RESET_ALL}")
-
 
 class ResponseType(enum.Enum):
     """Тип запрашиваемого ответа от модели."""
@@ -132,15 +88,12 @@ class LLM:
     }
 
     def __init__(self):
-        _llm_log("🚀 Инициализация LLM класса...")
         try:
             # self.client = OpenAI(api_key=config.OPENAI_API_KEY)
             self.client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.3)
             
             self.model_name = "llama3.1:8b"
-            _llm_log(f"✅ Ollama клиент успешно инициализирован с моделью: {self.model_name}", "SUCCESS")
         except Exception as e:
-            _llm_log(f"💥 ОШИБКА инициализации Ollama клиента: {e}", "ERROR")
             self.client = None
             self.model_name = "llama3.1:8b"
 
@@ -156,12 +109,9 @@ class LLM:
 
     def set_role(self, role: str) -> None:
         """Устанавливает роль подсказки (поддерживается только 'math teacher')."""
-        _llm_log(f"🎭 Установка роли: {role}")
         if role not in self.ROLES:
-            _llm_log(f"❌ ОШИБКА: Неподдерживаемая роль: {role}", "ERROR")
             raise ValueError("Unsupported model role selected")
         self.role = self.ROLES[role]["base"]
-        _llm_log(f"✅ Роль успешно установлена: {role}", "SUCCESS")
 
     def set_response_type(self, response_type: ResponseType) -> None:
         """Меняет тип ответа модели (влияет на формирование промпта)."""
@@ -218,59 +168,39 @@ class LLM:
 
     def run(self) -> str:
         self.request_id = self._generate_request_id()
-        _llm_log(f"🚀 Начало выполнения запроса", request_id=self.request_id)
         
         try:
             if self.client is None:
-                _llm_log("🚨 ОШИБКА: Ollama клиент недоступен", "ERROR", self.request_id)
                 return "Ollama клиент недоступен. Проверьте настройки."
             
-            # Формируем полный промпт для Ollama (объединяем роль и задачу)
             full_prompt = f"{self.role}\n\nЗадача: {self.task}"
             
-            _llm_log(f"🛠️ Подготовка запроса к модели {self.model_name}", request_id=self.request_id)
-            _llm_log(f"🎭 Система роль: {self.role[:100]}...", request_id=self.request_id, level="DEBUG")
-            _llm_log(f"📝 Пользовательское задание: {self.task[:200]}...", request_id=self.request_id, level="DEBUG")
-            
-            # Логируем параметры запроса для Ollama
             request_params = {
                 "model": self.model_name,
                 "temperature": 0.3,
                 "prompt_length": len(full_prompt)
             }
-            _llm_log(f"⚙️ Параметры запроса: {json.dumps(request_params, ensure_ascii=False)}", request_id=self.request_id, level="DEBUG")
             
             start_time = datetime.datetime.now()
-            _llm_log("📡 Отправка запроса к Ollama API...", request_id=self.request_id)
             
             # Используем метод invoke для OllamaLLM
             response_text = self.client.invoke(full_prompt)
             
             end_time = datetime.datetime.now()
             duration = (end_time - start_time).total_seconds()
-            _llm_log(f"⚡ Ответ получен за {duration:.2f} секунд", request_id=self.request_id, level="SUCCESS")
             
             # Проверяем что ответ получен
             if not response_text:
-                _llm_log("⚠️ Получен пустой ответ от Ollama", "WARNING", self.request_id)
                 return "Получен пустой ответ от модели"
             
-            _llm_log(f"📏 Длина ответа: {len(response_text)} символов", request_id=self.request_id)
-            _llm_log(f"📄 Начало ответа: {response_text[:200]}...", request_id=self.request_id, level="DEBUG")
-            
             if self.response_type == ResponseType.CALCULATION:
-                _llm_log("🔢 Извлечение числового значения из ответа", request_id=self.request_id)
                 extracted = self._extract_number(response_text)
-                _llm_log(f"🎯 Извлеченное число: {extracted}", request_id=self.request_id)
                 return extracted
                 
-            _llm_log("✅ Запрос успешно завершен", request_id=self.request_id, level="SUCCESS")
             return response_text
             
         except Exception as e:
-            _llm_log(f"💥 КРИТИЧЕСКАЯ ОШИБКА Ollama API: {e}", "ERROR", self.request_id)
             error_msg = f"Произошла ошибка при обращении к AI: {e}"
-            _llm_log(f"🚨 Возврат ошибки пользователю: {error_msg}", "ERROR", self.request_id)
             return error_msg
 
     def _extract_number(self, text: str) -> str:
@@ -280,26 +210,18 @@ class LLM:
 
     def respond(self, mode: AIMode | None, user_text: str) -> str:
         """Формирует промпт по режиму и возвращает ответ модели."""
-        _llm_log(f"🎯 Начало обработки respond для режима: {mode}")
-        _llm_log(f"💬 Пользовательский текст: {user_text[:100]}...", level="DEBUG")
         
         try:
             prompt = self._build_prompt(mode, user_text)
-            _llm_log(f"📝 Сформированный промпт: {prompt[:200]}...", level="DEBUG")
             
             answer = self.ask(prompt)
-            _llm_log(f"📄 Получен ответ, длина: {len(answer)} символов", level="SUCCESS")
             
             if mode == AIMode.GENERATE_TASK:
-                _llm_log("🧹 Применение санитизации для генерации задач")
                 sanitized = self._sanitize_generated_task(answer)
-                _llm_log(f"✨ Санитизированный ответ: {sanitized[:100]}...")
                 return sanitized
             
-            _llm_log("📤 Возврат обычного ответа без санитизации")
             return answer
         except Exception as e:
-            _llm_log(f"💥 ОШИБКА в LLM.respond: {e}", "ERROR")
             return "Произошла ошибка при обработке запроса AI"
 
     @staticmethod
