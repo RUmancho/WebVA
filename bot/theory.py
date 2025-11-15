@@ -1,5 +1,5 @@
 import streamlit as st
-from settings import OPENAI_API_KEY
+from bot.settings import OPENAI_API_KEY
 
 class TheoryManager:
     """Класс для управления теоретическими материалами"""

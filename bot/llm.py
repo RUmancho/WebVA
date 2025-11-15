@@ -4,7 +4,7 @@ import re
 import enum
 import datetime
 import time
-from prompt_loader import load_prompt, load_prompt_with_format
+from bot.prompt_loader import load_prompt, load_prompt_with_format
 
 class AIMode(enum.Enum):
     HELP_PROBLEM = "help_problem"

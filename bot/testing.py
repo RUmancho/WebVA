@@ -1,7 +1,8 @@
 import streamlit as st
 import json
-from settings import OPENAI_API_KEY
-from theory import TheoryManager
+import random
+from bot.settings import OPENAI_API_KEY
+from bot.theory import TheoryManager
 
 class TestingManager:
     """Класс для управления системой тестирования"""
@@ -255,7 +256,6 @@ class TestingManager:
             
             # Добавляем предметный звук
             if subject and subject in subject_sounds:
-                import random
                 subject_sound = random.choice(subject_sounds[subject])
                 st.caption(f"🎧 {subject_sound}")
             
@@ -272,7 +272,6 @@ class TestingManager:
             
             # Большие стикеры предмета
             stickers = subject_data['stickers']
-            import random
             selected_stickers = random.sample(stickers, min(5, len(stickers)))
             
             # Отображаем стикеры
@@ -300,7 +299,6 @@ class TestingManager:
             
             # Тематические комментарии
             funny_comments = subject_data['funny_comments']
-            import random
             selected_comment = random.choice(funny_comments)
             
             # Специальные анимации в зависимости от результата
@@ -356,7 +354,6 @@ class TestingManager:
                 return "Отлично! Продолжайте в том же духе! 🎉"
             
             funny_comments = self.SUBJECT_STICKERS[subject]['funny_comments']
-            import random
             return random.choice(funny_comments)
             
         except Exception as e:
@@ -616,7 +613,6 @@ class TestingManager:
                     "🎪 Подготавливаю захватывающий тест!",
                     "🚀 Запускаю генератор знаний!"
                 ]
-                import random
                 selected_message = random.choice(motivational_messages)
                 
                 with st.spinner(selected_message):
@@ -951,8 +947,6 @@ class TestingManager:
             percentage = (correct_count / total_questions) * 100
             
             # Определяем оценку с позитивными сообщениями
-            import random
-            
             if percentage >= 90:
                 grade = "Отлично"
                 grade_icon = "🏆"
@@ -1092,14 +1086,12 @@ class TestingManager:
                     st.write(f"**Правильный ответ:** {result['correct_answer']}")
                     
                     if result['is_correct']:
-                        import random
                         comment = random.choice(positive_comments)
                         st.success(f"{comment}")
                         # Небольшой звуковой эффект для правильного ответа (только текст)
                         if i == 0:  # Только для первого вопроса, чтобы не спамить
                             st.caption("🎵 *звон успеха* ✨")
                     else:
-                        import random
                         comment = random.choice(encouraging_comments)
                         st.info(f"{comment}")
                         # Мягкий звук для неправильного ответа
@@ -1171,7 +1163,6 @@ class TestingManager:
                 st.success(f"🎉 {funny_comment}")
                 
                 # Случайная анимация
-                import random
                 animations = [st.balloons, st.snow]
                 random.choice(animations)()
             

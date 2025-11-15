@@ -3,8 +3,8 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 import hashlib
 from datetime import datetime, timedelta
-from settings import DATABASE_URL
-from models import Base, User, StudentTeacherRelation, TeacherRequest, Call, LessonRecord
+from database.settings import DATABASE_URL
+from database.models import Base, User, StudentTeacherRelation, TeacherRequest, Call, LessonRecord
 
 class Database:
     """Класс для работы с базой данных через SQLAlchemy ORM"""

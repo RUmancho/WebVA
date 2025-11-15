@@ -1,5 +1,5 @@
-from settings import MIN_NAME_LENGTH, MIN_PASSWORD_LENGTH
-import settings
+from data_processor.settings import MIN_NAME_LENGTH, MIN_PASSWORD_LENGTH
+from database.settings import USER_ROLES
 import re
 
 class InputError:
@@ -71,8 +71,8 @@ class Validator:
         if not role:
             return InputError("Роль должна быть выбрана")
         
-        if role not in settings.USER_ROLES:
-            return InputError(f"Роль должна быть одной из: {', '.join(settings.USER_ROLES)}")
+        if role not in USER_ROLES:
+            return InputError(f"Роль должна быть одной из: {', '.join(USER_ROLES)}")
         
         return InputSuccess("OK")
     

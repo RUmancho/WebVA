@@ -1,7 +1,7 @@
 import streamlit as st
-from database import db
+from database.database import db
 from data_processor.validation import validator
-from settings import USER_ROLES, SESSION_STATE_KEY
+from database.settings import USER_ROLES, SESSION_STATE_KEY
 
 class AuthManager:
     """Класс для управления аутентификацией и регистрацией"""

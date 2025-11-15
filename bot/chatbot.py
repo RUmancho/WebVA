@@ -1,9 +1,9 @@
 import streamlit as st
 from datetime import datetime
-from settings import CHAT_BOT_NAME, CHAT_SYSTEM_MESSAGE, OPENAI_API_KEY
 import openai
 import json
-from prompt_loader import load_prompt
+from bot.settings import CHAT_BOT_NAME, CHAT_SYSTEM_MESSAGE, OPENAI_API_KEY
+from bot.prompt_loader import load_prompt
 
 class ChatBot:
     """Класс для работы с чат-ботом поддержки"""
