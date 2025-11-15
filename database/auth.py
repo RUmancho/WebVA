@@ -31,6 +31,12 @@ class AuthManager:
     @staticmethod
     def login_user(user_data):
         """Вход пользователя в систему"""
+        try:
+            # Обновляем статус онлайн при входе
+            db.update_user_online_status(user_data['id'], True)
+        except Exception as e:
+            print(f"Ошибка обновления статуса онлайн: {e}")
+        
         st.session_state[SESSION_STATE_KEY] = {
             'logged_in': True,
             'user_data': user_data,
@@ -40,6 +46,14 @@ class AuthManager:
     @staticmethod
     def logout_user():
         """Выход пользователя из системы"""
+        try:
+            # Обновляем статус офлайн при выходе
+            user = st.session_state.get(SESSION_STATE_KEY, {}).get('user_data')
+            if user and user.get('id'):
+                db.update_user_online_status(user['id'], False)
+        except Exception as e:
+            print(f"Ошибка обновления статуса офлайн: {e}")
+        
         st.session_state[SESSION_STATE_KEY] = {
             'logged_in': False,
             'user_data': None,

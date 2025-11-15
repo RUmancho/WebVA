@@ -1,3 +1,4 @@
+sqlaclchemy
 streamlit
 openai
-sqlalchemy
+json

@@ -1,8 +1,7 @@
 import os
+from prompt_loader import load_prompt
 
 CHAT_BOT_NAME = "Помощник"
-CHAT_SYSTEM_MESSAGE = """Вы - дружелюбный помощник в образовательной системе. 
-Помогайте пользователям с вопросами о регистрации, навигации по сайту и общими вопросами об образовании.
-Отвечайте вежливо и по существу на русском языке."""
+CHAT_SYSTEM_MESSAGE = load_prompt("chat_system_message.txt")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")

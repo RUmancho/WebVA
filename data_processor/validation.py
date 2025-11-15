@@ -1,4 +1,5 @@
 from settings import MIN_NAME_LENGTH, MIN_PASSWORD_LENGTH
+import settings
 import re
 
 class Validator:
@@ -64,13 +65,12 @@ class Validator:
     @staticmethod
     def validate_role(role):
         """Валидация роли пользователя"""
-        from config import USER_ROLES
         
         if not role:
             return False, "Роль должна быть выбрана"
         
-        if role not in USER_ROLES:
-            return False, f"Роль должна быть одной из: {', '.join(USER_ROLES)}"
+        if role not in settings.USER_ROLES:
+            return False, f"Роль должна быть одной из: {', '.join(settings.USER_ROLES)}"
         
         return True, "OK"
     
