@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 import hashlib
 from datetime import datetime, timedelta
-from config import DATABASE_URL
+from settings import DATABASE_URL
 from models import Base, User, StudentTeacherRelation, TeacherRequest, Call, LessonRecord
 
 class Database:

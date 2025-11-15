@@ -1,9 +1,9 @@
 import streamlit as st
-from auth import auth_manager
+from database.auth import auth_manager
 from database import db
-from chatbot import chatbot
-from theory import theory_manager
-from testing import testing_manager
+from bot.chatbot import chatbot
+from bot.theory import theory_manager
+from bot.testing import testing_manager
 from config import PAGE_CONFIG
 
 def main():

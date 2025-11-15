@@ -1,30 +1,7 @@
-import os
-
 AI_LOGS = True
 
 # ОСНОВНЫЕ НАСТРОЙКИ ПРИЛОЖЕНИЯ
 APP_TITLE = "Система регистрации учителей и учеников"
-DATABASE_NAME = "users.db"
-SESSION_STATE_KEY = "user_session"
-
-# НАСТРОЙКИ SQLALCHEMY
-DATABASE_URL = f"sqlite:///{DATABASE_NAME}"
-
-# РОЛИ ПОЛЬЗОВАТЕЛЕЙ
-USER_ROLES = ["Ученик", "Учитель"]
-
-# НАСТРОЙКИ ВАЛИДАЦИИ
-MIN_NAME_LENGTH = 2
-MIN_PASSWORD_LENGTH = 6
-
-# НАСТРОЙКИ ЧАТА
-CHAT_BOT_NAME = "Помощник"
-CHAT_SYSTEM_MESSAGE = """Вы - дружелюбный помощник в образовательной системе. 
-Помогайте пользователям с вопросами о регистрации, навигации по сайту и общими вопросами об образовании.
-Отвечайте вежливо и по существу на русском языке."""
-
-# API КЛЮЧИ (через переменные среды)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # НАСТРОЙКИ STREAMLIT
 PAGE_CONFIG = {

@@ -1,6 +1,6 @@
 import streamlit as st
 import json
-from config import OPENAI_API_KEY
+from settings import OPENAI_API_KEY
 from theory import TheoryManager
 
 class TestingManager:

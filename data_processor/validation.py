@@ -1,4 +1,4 @@
-from config import MIN_NAME_LENGTH, MIN_PASSWORD_LENGTH
+from settings import MIN_NAME_LENGTH, MIN_PASSWORD_LENGTH
 import re
 
 class Validator:

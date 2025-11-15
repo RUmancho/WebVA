@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import datetime
-from config import CHAT_BOT_NAME, CHAT_SYSTEM_MESSAGE, OPENAI_API_KEY
+from settings import CHAT_BOT_NAME, CHAT_SYSTEM_MESSAGE, OPENAI_API_KEY
 
 class ChatBot:
     """Класс для работы с чат-ботом поддержки"""
