@@ -4,18 +4,9 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 def load_prompt(filename: str) -> str:
     """Загружает промпт из файла в папке prompts."""
-    try:
-        filepath = PROMPTS_DIR / filename
-        if not filepath.exists():
-            print(f"Предупреждение: файл промпта {filename} не найден")
-            return ""
-        
-        with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-        return content
-    except Exception as e:
-        print(f"Ошибка загрузки промпта {filename}: {e}")
-        return ""
+    filepath = PROMPTS_DIR / filename
+    with open(filepath, 'rb') as f: 
+        return f.read().decode('utf-8')
 
 def load_prompt_with_format(filename: str, **kwargs) -> str:
     """Загружает промпт из файла и форматирует его с переданными параметрами."""
