@@ -1,5 +1,4 @@
-from langchain_ollama import OllamaLLM 
-from openai import OpenAI
+from langchain_ollama import OllamaLLM
 import re
 import enum
 import datetime
@@ -99,19 +98,29 @@ class LLM:
 
     def __init__(self):
         try:
-            # self.client = OpenAI(api_key=config.OPENAI_API_KEY)
-            self.client = OllamaLLM(model="deepseek-r1:7b", temperature=0.3)
-            
-            self.model_name = "deepseek-r1:7b"
+            # Пробуем использовать deepseek:7b
+            self.client = OllamaLLM(model="deepseek:7b", temperature=0.3)
+            self.model_name = "deepseek:7b"
+            print("Используется модель: deepseek:7b")
         except Exception as e:
             try:
-                # Fallback на другую модель если deepseek-r1:7b недоступна
-                self.client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.3)
-                self.model_name = "deepseek-coder:6.7b"
-            except Exception as e2:
-                self.client = None
+                # Fallback на deepseek-r1:7b если deepseek:7b недоступна
+                print(f"Модель deepseek:7b недоступна, пробуем deepseek-r1:7b: {e}")
+                self.client = OllamaLLM(model="deepseek-r1:7b", temperature=0.3)
                 self.model_name = "deepseek-r1:7b"
-                print(f"Ошибка инициализации Ollama клиента: {e2}")
+                print("Используется модель: deepseek-r1:7b")
+            except Exception as e2:
+                try:
+                    # Fallback на deepseek-coder:6.7b
+                    print(f"Модель deepseek-r1:7b недоступна, пробуем deepseek-coder:6.7b: {e2}")
+                    self.client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.3)
+                    self.model_name = "deepseek-coder:6.7b"
+                    print("Используется модель: deepseek-coder:6.7b")
+                except Exception as e3:
+                    self.client = None
+                    self.model_name = "deepseek:7b"
+                    print(f"Ошибка инициализации Ollama клиента: {e3}")
+                    print("Убедитесь, что Ollama установлен и модель deepseek:7b загружена")
 
         self.role = ""
         self.task = ""

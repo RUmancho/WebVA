@@ -4,11 +4,8 @@ import os
 # Добавляем родительскую директорию в путь для импорта
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-try:
-    import constants.physics as const
-except ImportError:
-    print("Ошибка: не удалось импортировать constants.physics")
-    raise
+import constants.physics as const
+
 
 class Mechanics:
     class NewtonSecondLaw:
@@ -38,9 +35,9 @@ class Thermodynamics:
         T = lambda P, V, n, R: P * V / (n * R)
 
     class Heat:
-        Q = lambda m, c, ΔT: m * c * ΔT
-        c = lambda Q, m, ΔT: Q / (m * ΔT)
-        ΔT = lambda Q, m, c: Q / (m * c)
+        Q = lambda m, c, dT: m * c * dT
+        c = lambda Q, m, dT: Q / (m * dT)
+        dT = lambda Q, m, c: Q / (m * c)
 
 class Electromagnetism:
     class Coulomb:
@@ -57,20 +54,3 @@ class Electromagnetism:
         P = lambda V, I: V * I
         V = lambda P, I: P / I
         I = lambda P, V: P / V
-
-class Optics:
-    class Refraction:
-        n = lambda c, v: c / v
-        v = lambda c, n: c / n
-        θ2 = lambda n1, n2, θ1: __import__('math').asin(n1 * __import__('math').sin(θ1) / n2)
-
-class Quantum:
-    class PhotonEnergy:
-        E = lambda f, h=const.h: h * f
-        f = lambda E, h=const.h: E / h
-        λ = lambda E, h=const.h, c=const.c: h * c / E
-
-# Примеры использования:
-print("Сила тяжести:", Mechanics.Gravity.F(5, 10, 3))
-print("Масса из закона Кулона:", Electromagnetism.Coulomb.q1(0.001, 1e-6, 0.1))
-print("Энергия фотона:", Quantum.PhotonEnergy.E(6e14))

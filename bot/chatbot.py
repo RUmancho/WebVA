@@ -1,9 +1,9 @@
 import streamlit as st
 from datetime import datetime
-import openai
 import json
-from bot.settings import CHAT_BOT_NAME, CHAT_SYSTEM_MESSAGE, OPENAI_API_KEY
+from bot.settings import CHAT_BOT_NAME, CHAT_SYSTEM_MESSAGE
 from bot.prompt_loader import load_prompt
+from langchain_ollama import OllamaLLM
 
 class ChatBot:
     """Класс для работы с чат-ботом поддержки"""
@@ -11,8 +11,35 @@ class ChatBot:
     def __init__(self):
         self.bot_name = CHAT_BOT_NAME
         self.system_message = CHAT_SYSTEM_MESSAGE
-        self.api_key = OPENAI_API_KEY
         self.init_chat_session()
+        self._init_ollama_client()
+    
+    def _init_ollama_client(self):
+        """Инициализация Ollama клиента для чат-бота"""
+        try:
+            # Пробуем использовать deepseek:7b
+            self.ollama_client = OllamaLLM(model="deepseek:7b", temperature=0.7)
+            self.model_name = "deepseek:7b"
+            print("Чат-бот использует модель: deepseek:7b")
+        except Exception as e:
+            try:
+                # Fallback на deepseek-r1:7b
+                print(f"Модель deepseek:7b недоступна для чат-бота, пробуем deepseek-r1:7b: {e}")
+                self.ollama_client = OllamaLLM(model="deepseek-r1:7b", temperature=0.7)
+                self.model_name = "deepseek-r1:7b"
+                print("Чат-бот использует модель: deepseek-r1:7b")
+            except Exception as e2:
+                try:
+                    # Fallback на deepseek-coder:6.7b
+                    print(f"Модель deepseek-r1:7b недоступна, пробуем deepseek-coder:6.7b: {e2}")
+                    self.ollama_client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.7)
+                    self.model_name = "deepseek-coder:6.7b"
+                    print("Чат-бот использует модель: deepseek-coder:6.7b")
+                except Exception as e3:
+                    self.ollama_client = None
+                    self.model_name = "deepseek:7b"
+                    print(f"Ошибка инициализации Ollama клиента для чат-бота: {e3}")
+                    print("Убедитесь, что Ollama установлен и модель deepseek:7b загружена")
     
     def init_chat_session(self):
         """Инициализация сессии чата"""
@@ -40,48 +67,54 @@ class ChatBot:
     def get_bot_response(self, user_message):
         """Получение ответа от бота"""
         try:
-            # Если есть API ключ OpenAI, используем его
-            if self.api_key:
-                return self.get_openai_response(user_message)
+            # Используем Ollama для чат-бота
+            if self.ollama_client is not None:
+                return self.get_ollama_response(user_message)
             else:
                 return self.get_local_response(user_message)
         except Exception as e:
             print(f"Ошибка получения ответа от бота: {e}")
             return "Извините, произошла ошибка. Попробуйте позже или обратитесь к администратору."
     
-    def get_openai_response(self, user_message):
-        """Получение ответа от OpenAI"""
+    def get_ollama_response(self, user_message):
+        """Получение ответа от Ollama (DeepSeek 7B)"""
         try:
-            openai.api_key = self.api_key
+            if self.ollama_client is None:
+                return self.get_local_response(user_message)
             
-            # Подготовка сообщений для API
-            messages = [{"role": "system", "content": self.system_message}]
+            # Формируем контекст из истории сообщений
+            context_parts = [self.system_message]
             
-            # Добавляем последние сообщения из истории для контекста
-            recent_messages = st.session_state.chat_messages[-10:]  # Последние 10 сообщений
+            # Добавляем последние сообщения из истории для контекста (последние 10)
+            recent_messages = st.session_state.chat_messages[-10:]
             for msg in recent_messages:
-                if msg['role'] in ['user', 'assistant']:
-                    messages.append({
-                        "role": msg['role'],
-                        "content": msg['content']
-                    })
+                if msg['role'] == 'user':
+                    context_parts.append(f"Пользователь: {msg['content']}")
+                elif msg['role'] == 'assistant':
+                    context_parts.append(f"Помощник: {msg['content']}")
             
             # Добавляем текущее сообщение пользователя
-            messages.append({"role": "user", "content": user_message})
+            context_parts.append(f"Пользователь: {user_message}")
+            context_parts.append("Помощник:")
             
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",  # Используем gpt-4o-mini как указано в правилах
-                messages=messages,
-                max_tokens=500,
-                temperature=0.7
-            )
+            # Объединяем все в один промпт
+            full_prompt = "\n".join(context_parts)
             
-            return response.choices[0].message.content
+            # Получаем ответ от модели
+            response_text = self.ollama_client.invoke(full_prompt)
             
-        except ImportError:
-            return self.get_local_response(user_message)
+            if not response_text:
+                return self.get_local_response(user_message)
+            
+            # Очищаем ответ от возможных префиксов
+            response_text = response_text.strip()
+            if response_text.startswith("Помощник:"):
+                response_text = response_text.replace("Помощник:", "").strip()
+            
+            return response_text
+            
         except Exception as e:
-            print(f"Ошибка OpenAI API: {e}")
+            print(f"Ошибка Ollama API: {e}")
             return self.get_local_response(user_message)
     
     def _load_responses(self):

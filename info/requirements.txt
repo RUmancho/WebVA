@@ -1,4 +1,3 @@
-sqlaclchemy
+sqlalchemy
 streamlit
-openai
-json
+langchain-ollama
