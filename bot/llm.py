@@ -100,12 +100,18 @@ class LLM:
     def __init__(self):
         try:
             # self.client = OpenAI(api_key=config.OPENAI_API_KEY)
-            self.client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.3)
+            self.client = OllamaLLM(model="deepseek-r1:7b", temperature=0.3)
             
-            self.model_name = "llama3.1:8b"
+            self.model_name = "deepseek-r1:7b"
         except Exception as e:
-            self.client = None
-            self.model_name = "llama3.1:8b"
+            try:
+                # Fallback на другую модель если deepseek-r1:7b недоступна
+                self.client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.3)
+                self.model_name = "deepseek-coder:6.7b"
+            except Exception as e2:
+                self.client = None
+                self.model_name = "deepseek-r1:7b"
+                print(f"Ошибка инициализации Ollama клиента: {e2}")
 
         self.role = ""
         self.task = ""

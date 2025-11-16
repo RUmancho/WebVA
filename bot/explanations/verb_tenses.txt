@@ -1,0 +1,19 @@
+## Времена глаголов в английском языке
+
+**Present (Настоящее время):**
+- Present Simple: I work (регулярные действия)
+- Present Continuous: I am working (действие сейчас)
+- Present Perfect: I have worked (результат к настоящему)
+
+**Past (Прошедшее время):**
+- Past Simple: I worked (завершенное действие в прошлом)
+- Past Continuous: I was working (длительное действие в прошлом)
+- Past Perfect: I had worked (действие до другого в прошлом)
+
+**Future (Будущее время):**
+- Future Simple: I will work (простое будущее)
+- Future Continuous: I will be working (длительное в будущем)
+- Future Perfect: I will have worked (завершение к моменту в будущем)
+
+**Совет:** Начните с изучения Simple времен, они используются чаще всего!
+

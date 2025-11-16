@@ -16,8 +16,8 @@ from database.database import db
 from bot.chatbot import chatbot
 from bot.theory import theory_manager
 from bot.testing import testing_manager
-from formulas.formulas import formula_manager
-from datetime import datetime, time
+from formulas import formula_manager
+from datetime import datetime
 
 PAGE_CONFIG = {
     "page_title": "Система регистрации учителей и учеников",

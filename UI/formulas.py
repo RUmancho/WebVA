@@ -235,9 +235,9 @@ class FormulaManager:
             elif category == "⚡ ФИЗИКА" and subcategory == "Механика":
                 if formula_name == "Вес тела":
                     if target == "m":
-                        return values['F'] / G_CONSTANT
+                        return values['F'] / g
                     else:  # F
-                        return values['m'] * G_CONSTANT
+                        return values['m'] * g
                 
                 elif formula_name == "Скорость":
                     if target == "s":
