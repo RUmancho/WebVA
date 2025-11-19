@@ -1,5 +1,6 @@
 from asyncio import threads
 import streamlit as st
+import time
 from bot.settings import OPENAI_API_KEY
 from langchain_ollama import OllamaLLM
 
@@ -644,32 +645,56 @@ class TheoryManager:
             is_error_template = explanation_text and "К сожалению, не удалось сгенерировать" in explanation_text
             
             if not explanation_text or is_error_template:
-                with st.spinner("Генерирую объяснение темы с помощью LLM..."):
-                    try:
-                        explanation = self.get_topic_explanation(subject, section, topic)
-                        st.session_state.theory_state['explanation_text'] = explanation
-                        explanation_text = explanation
-                    except Exception as e:
-                        print(f"Ошибка генерации объяснения: {e}")
-                        st.error(f"Ошибка генерации объяснения: {e}")
-                        explanation_text = self._get_error_message(subject, section, topic)
-                        st.session_state.theory_state['explanation_text'] = explanation_text
+                # Создаем контейнер для streaming отображения
+                explanation_container = st.empty()
+                
+                try:
+                    # Генерируем объяснение с streaming
+                    full_text = ""
+                    for chunk in self.get_topic_explanation_stream(subject, section, topic):
+                        full_text += chunk
+                        # Отображаем текст по мере поступления с курсором
+                        explanation_container.markdown(full_text + "▌")
+                        time.sleep(0.01)  # Небольшая задержка для визуального эффекта
+                    
+                    # Убираем курсор и сохраняем финальный текст
+                    explanation_container.markdown(full_text)
+                    st.session_state.theory_state['explanation_text'] = full_text
+                    explanation_text = full_text
+                except Exception as e:
+                    print(f"Ошибка генерации объяснения: {e}")
+                    st.error(f"Ошибка генерации объяснения: {e}")
+                    explanation_text = self._get_error_message(subject, section, topic)
+                    explanation_container.markdown(explanation_text)
+                    st.session_state.theory_state['explanation_text'] = explanation_text
             
-            # Отображаем объяснение
-            if explanation_text:
+            # Отображаем объяснение (если оно уже было сохранено)
+            if explanation_text and not is_error_template:
                 st.markdown(explanation_text)
-            else:
-                st.error("Не удалось загрузить объяснение. Попробуйте позже.")
             
             # Кнопка для нового объяснения
             if st.button("🔄 Получить другое объяснение", key="regenerate_explanation_button"):
-                with st.spinner("Генерирую новое объяснение с помощью LLM..."):
-                    try:
-                        explanation = self.get_topic_explanation(subject, section, topic, regenerate=True)
-                        st.session_state.theory_state['explanation_text'] = explanation
-                    except Exception as e:
-                        print(f"Ошибка регенерации объяснения: {e}")
-                        st.error(f"Ошибка генерации объяснения: {e}")
+                # Очищаем старое объяснение
+                st.session_state.theory_state['explanation_text'] = None
+                
+                # Создаем контейнер для streaming отображения
+                explanation_container = st.empty()
+                
+                try:
+                    # Генерируем новое объяснение с streaming
+                    full_text = ""
+                    for chunk in self.get_topic_explanation_stream(subject, section, topic, regenerate=True):
+                        full_text += chunk
+                        # Отображаем текст по мере поступления с курсором
+                        explanation_container.markdown(full_text + "▌")
+                        time.sleep(0.01)  # Небольшая задержка для визуального эффекта
+                    
+                    # Убираем курсор и сохраняем финальный текст
+                    explanation_container.markdown(full_text)
+                    st.session_state.theory_state['explanation_text'] = full_text
+                except Exception as e:
+                    print(f"Ошибка регенерации объяснения: {e}")
+                    st.error(f"Ошибка генерации объяснения: {e}")
                 st.rerun()
             
         except Exception as e:
@@ -696,6 +721,44 @@ class TheoryManager:
                     print(f"Ошибка OpenAI API: {e2}")
                     return self._get_error_message(subject, section, topic)
             return self._get_error_message(subject, section, topic)
+    
+    def get_topic_explanation_stream(self, subject, section, topic, regenerate=False):
+        """Получить объяснение темы от LLM с streaming (Ollama или OpenAI)"""
+        try:
+            # Приоритет: локальная LLM (Ollama), затем OpenAI
+            if self.ollama_client is not None:
+                yield from self.get_ollama_explanation_stream(subject, section, topic, regenerate)
+            elif self.api_key:
+                yield from self.get_openai_explanation_stream(subject, section, topic, regenerate)
+            else:
+                error_msg = self._get_error_message(subject, section, topic)
+                # Имитируем streaming для сообщения об ошибке
+                chunk_size = 10
+                for i in range(0, len(error_msg), chunk_size):
+                    chunk = error_msg[i:i+chunk_size]
+                    yield chunk
+                    time.sleep(0.02)
+        except Exception as e:
+            print(f"Ошибка получения объяснения (streaming): {e}")
+            # Пробуем OpenAI как fallback, если Ollama не сработал
+            if self.api_key:
+                try:
+                    yield from self.get_openai_explanation_stream(subject, section, topic, regenerate)
+                except Exception as e2:
+                    print(f"Ошибка OpenAI API (streaming): {e2}")
+                    error_msg = self._get_error_message(subject, section, topic)
+                    chunk_size = 10
+                    for i in range(0, len(error_msg), chunk_size):
+                        chunk = error_msg[i:i+chunk_size]
+                        yield chunk
+                        time.sleep(0.02)
+            else:
+                error_msg = self._get_error_message(subject, section, topic)
+                chunk_size = 10
+                for i in range(0, len(error_msg), chunk_size):
+                    chunk = error_msg[i:i+chunk_size]
+                    yield chunk
+                    time.sleep(0.02)
     
     def get_ollama_explanation(self, subject, section, topic, regenerate=False):
         """Получить объяснение от локальной LLM (Ollama)"""
@@ -776,6 +839,136 @@ class TheoryManager:
             
             return self._get_error_message(subject, section, topic)
     
+    def get_ollama_explanation_stream(self, subject, section, topic, regenerate=False):
+        """Получить объяснение от локальной LLM (Ollama) с streaming"""
+        system_prompt = f"""Ты опытный учитель {subject.lower()}а с 20-летним стажем. 
+Тебе необходимо просто и понятно объяснить тему "{topic}" из раздела "{section}".
+
+Требования к объяснению:
+1. Используй простой и доступный язык
+2. Приводи конкретные примеры
+3. Объясняй шаг за шагом
+4. Используй аналогии из повседневной жизни
+5. Структурируй материал логично
+6. Выделяй ключевые моменты
+7. Пиши на русском языке
+8. Объем: 300-500 слов
+
+Начни объяснение с краткого введения в тему, затем подробно разбери основные понятия и заверши практическими советами или примерами применения."""
+        
+        user_prompt = f"Объясни тему '{topic}' из раздела '{section}' предмета '{subject}'"
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+        
+        try:
+            if self.ollama_client is None:
+                print("Ollama клиент не инициализирован, пробуем OpenAI...")
+                if self.api_key:
+                    yield from self.get_openai_explanation_stream(subject, section, topic, regenerate)
+                else:
+                    error_msg = self._get_error_message(subject, section, topic)
+                    words = error_msg.split()
+                    for word in words:
+                        yield word + " "
+                return
+            
+            print(f"Генерирую объяснение через Ollama (streaming, модель: {self.model_name})...")
+            
+            # Для Ollama используем streaming через invoke с callback
+            # Но OllamaLLM из langchain может не поддерживать streaming напрямую
+            # Поэтому используем альтернативный подход - получаем поток и разбиваем на слова
+            try:
+                import ollama
+                
+                # Используем прямой вызов Ollama API для streaming
+                stream = ollama.chat(
+                    model=self.model_name.split(':')[0] if ':' in self.model_name else self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    stream=True
+                )
+                
+                for chunk in stream:
+                    if chunk.get('message') and chunk['message'].get('content'):
+                        content = chunk['message']['content']
+                        # Отдаем текст по мере поступления с небольшой задержкой
+                        if content.strip():
+                            yield content
+                            time.sleep(0.02)  # Небольшая задержка для плавности
+                
+            except ImportError:
+                # Если ollama не установлен, используем обычный метод
+                print("Библиотека ollama не установлена, используем обычный метод...")
+                response_text = self.ollama_client.invoke(full_prompt)
+                if response_text:
+                    # Имитируем streaming, отдавая текст по частям
+                    chunk_size = 10  # Отдаем по 10 символов за раз
+                    for i in range(0, len(response_text), chunk_size):
+                        chunk = response_text[i:i+chunk_size]
+                        yield chunk
+                        time.sleep(0.02)
+                else:
+                    if self.api_key:
+                        yield from self.get_openai_explanation_stream(subject, section, topic, regenerate)
+                    else:
+                        error_msg = self._get_error_message(subject, section, topic)
+                        # Имитируем streaming для сообщения об ошибке
+                        chunk_size = 10
+                        for i in range(0, len(error_msg), chunk_size):
+                            chunk = error_msg[i:i+chunk_size]
+                            yield chunk
+                            time.sleep(0.02)
+            except Exception as e:
+                print(f"Ошибка Ollama streaming: {e}")
+                # Fallback на обычный метод
+                try:
+                    response_text = self.ollama_client.invoke(full_prompt)
+                    if response_text:
+                        # Имитируем streaming
+                        chunk_size = 10
+                        for i in range(0, len(response_text), chunk_size):
+                            chunk = response_text[i:i+chunk_size]
+                            yield chunk
+                            time.sleep(0.02)
+                    else:
+                        if self.api_key:
+                            yield from self.get_openai_explanation_stream(subject, section, topic, regenerate)
+                except Exception as e2:
+                    print(f"Ошибка при fallback: {e2}")
+                    if self.api_key:
+                        yield from self.get_openai_explanation_stream(subject, section, topic, regenerate)
+                    else:
+                        error_msg = self._get_error_message(subject, section, topic)
+                        chunk_size = 10
+                        for i in range(0, len(error_msg), chunk_size):
+                            chunk = error_msg[i:i+chunk_size]
+                            yield chunk
+                            time.sleep(0.02)
+            
+        except Exception as e:
+            print(f"Ошибка Ollama streaming API: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            if self.api_key:
+                try:
+                    yield from self.get_openai_explanation_stream(subject, section, topic, regenerate)
+                except Exception as e3:
+                    error_msg = self._get_error_message(subject, section, topic)
+                    chunk_size = 10
+                    for i in range(0, len(error_msg), chunk_size):
+                        chunk = error_msg[i:i+chunk_size]
+                        yield chunk
+                        time.sleep(0.02)
+            else:
+                error_msg = self._get_error_message(subject, section, topic)
+                chunk_size = 10
+                for i in range(0, len(error_msg), chunk_size):
+                    chunk = error_msg[i:i+chunk_size]
+                    yield chunk
+                    time.sleep(0.02)
+    
     def get_openai_explanation(self, subject, section, topic, regenerate=False):
         """Получить объяснение от OpenAI"""
         try:
@@ -832,6 +1025,80 @@ class TheoryManager:
             import traceback
             traceback.print_exc()
             return self._get_error_message(subject, section, topic)
+    
+    def get_openai_explanation_stream(self, subject, section, topic, regenerate=False):
+        """Получить объяснение от OpenAI с streaming"""
+        try:
+            from openai import OpenAI
+            
+            if not self.api_key:
+                print("OpenAI API ключ не установлен")
+                error_msg = self._get_error_message(subject, section, topic)
+                chunk_size = 10
+                for i in range(0, len(error_msg), chunk_size):
+                    chunk = error_msg[i:i+chunk_size]
+                    yield chunk
+                    time.sleep(0.02)
+                return
+            
+            print(f"Генерирую объяснение через OpenAI (streaming, модель: gpt-4o-mini)...")
+            client = OpenAI(api_key=self.api_key)
+            
+            system_prompt = f"""Ты опытный учитель {subject.lower()}а с 20-летним стажем. 
+Тебе необходимо просто и понятно объяснить тему "{topic}" из раздела "{section}".
+
+Требования к объяснению:
+1. Используй простой и доступный язык
+2. Приводи конкретные примеры
+3. Объясняй шаг за шагом
+4. Используй аналогии из повседневной жизни
+5. Структурируй материал логично
+6. Выделяй ключевые моменты
+7. Пиши на русском языке
+8. Объем: 300-500 слов
+
+Начни объяснение с краткого введения в тему, затем подробно разбери основные понятия и заверши практическими советами или примерами применения."""
+            
+            user_prompt = f"Объясни тему '{topic}' из раздела '{section}' предмета '{subject}'"
+            
+            # Используем streaming
+            stream = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=1000,
+                temperature=0.7,
+                stream=True
+            )
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    content = chunk.choices[0].delta.content
+                    # Отдаем текст по мере поступления с небольшой задержкой
+                    if content.strip():
+                        yield content
+                        time.sleep(0.01)  # Небольшая задержка для плавности
+            
+        except ImportError:
+            print("Библиотека openai не установлена")
+            error_msg = self._get_error_message(subject, section, topic)
+            chunk_size = 10
+            for i in range(0, len(error_msg), chunk_size):
+                chunk = error_msg[i:i+chunk_size]
+                yield chunk
+                time.sleep(0.02)
+        except Exception as e:
+            print(f"Ошибка OpenAI API (streaming): {e}")
+            import traceback
+            traceback.print_exc()
+            error_msg = self._get_error_message(subject, section, topic)
+            chunk_size = 10
+            for i in range(0, len(error_msg), chunk_size):
+                chunk = error_msg[i:i+chunk_size]
+                yield chunk
+                time.sleep(0.02)
     
     def _get_error_message(self, subject, section, topic):
         """Сообщение об ошибке, когда LLM недоступны"""
