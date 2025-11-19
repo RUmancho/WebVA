@@ -3,6 +3,7 @@ import json
 import random
 from bot.settings import OPENAI_API_KEY
 from bot.theory import TheoryManager
+from langchain_ollama import OllamaLLM
 
 class TestingManager:
     """Класс для управления системой тестирования"""
@@ -12,6 +13,34 @@ class TestingManager:
         self.theory_manager = TheoryManager()
         self.SUBJECTS_STRUCTURE = self.theory_manager.SUBJECTS_STRUCTURE
         self.init_testing_session()
+        self._init_ollama_client()
+    
+    def _init_ollama_client(self):
+        """Инициализация Ollama клиента для генерации тестов"""
+        try:
+            # Пробуем использовать deepseek:7b
+            self.ollama_client = OllamaLLM(model="deepseek:7b", temperature=0.7)
+            self.model_name = "deepseek:7b"
+            print("Генерация тестов использует модель: deepseek:7b")
+        except Exception as e:
+            try:
+                # Fallback на deepseek-r1:7b
+                print(f"Модель deepseek:7b недоступна для тестов, пробуем deepseek-r1:7b: {e}")
+                self.ollama_client = OllamaLLM(model="deepseek-r1:7b", temperature=0.7)
+                self.model_name = "deepseek-r1:7b"
+                print("Генерация тестов использует модель: deepseek-r1:7b")
+            except Exception as e2:
+                try:
+                    # Fallback на deepseek-coder:6.7b
+                    print(f"Модель deepseek-r1:7b недоступна, пробуем deepseek-coder:6.7b: {e2}")
+                    self.ollama_client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.7)
+                    self.model_name = "deepseek-coder:6.7b"
+                    print("Генерация тестов использует модель: deepseek-coder:6.7b")
+                except Exception as e3:
+                    self.ollama_client = None
+                    self.model_name = "deepseek:7b"
+                    print(f"Ошибка инициализации Ollama клиента для тестов: {e3}")
+                    print("Убедитесь, что Ollama установлен и модель deepseek:7b загружена")
         
         # Уровни сложности
         self.DIFFICULTY_LEVELS = {
@@ -412,7 +441,7 @@ class TestingManager:
             
             # Кнопка "Назад"
             if state['current_page'] not in ['subjects', 'test']:
-                if st.button("⬅️ Назад"):
+                if st.button("⬅️ Назад", key="testing_back_button"):
                     self.navigate_back()
                     st.rerun()
             
@@ -702,7 +731,7 @@ class TestingManager:
                 self.show_subject_stickers(state['selected_subject'], state['selected_topic'])
                 
                 st.success("🎊 Поздравляем! Все вопросы отвечены!")
-                if st.button("✅ Завершить тест и узнать результат", type="primary"):
+                if st.button("✅ Завершить тест и узнать результат", type="primary", key="finish_test_button"):
                     self.calculate_results()
                     state['current_page'] = 'results'
                     
@@ -722,7 +751,7 @@ class TestingManager:
             # Кнопка генерации нового теста
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🔄 Сгенерировать новый тест"):
+                if st.button("🔄 Сгенерировать новый тест", key="regenerate_test_button"):
                     state['current_test'] = None
                     state['user_answers'] = {}
                     
@@ -734,7 +763,7 @@ class TestingManager:
                     st.rerun()
             
             with col2:
-                if st.button("🎯 Другая тема"):
+                if st.button("🎯 Другая тема", key="different_topic_button"):
                     state['current_test'] = None
                     state['user_answers'] = {}
                     state['current_page'] = 'topics'
@@ -752,12 +781,81 @@ class TestingManager:
     def generate_test(self, subject, section, topic, difficulty):
         """Генерация теста"""
         try:
-            if self.api_key:
+            # Приоритет: локальная LLM (Ollama), затем OpenAI, затем локальные тесты
+            if self.ollama_client is not None:
+                return self.generate_ollama_test(subject, section, topic, difficulty)
+            elif self.api_key:
                 return self.generate_openai_test(subject, section, topic, difficulty)
             else:
                 return self.generate_local_test(subject, section, topic, difficulty)
         except Exception as e:
             print(f"Ошибка генерации теста: {e}")
+            return self.generate_local_test(subject, section, topic, difficulty)
+    
+    def generate_ollama_test(self, subject, section, topic, difficulty):
+        """Генерация теста через локальную LLM (Ollama)"""
+        try:
+            if self.ollama_client is None:
+                return self.generate_local_test(subject, section, topic, difficulty)
+            
+            difficulty_info = self.DIFFICULTY_LEVELS[difficulty]
+            
+            system_prompt = f"""Ты опытный преподаватель {subject.lower()}а. 
+Создай тест из 5 вопросов по теме "{topic}" из раздела "{section}".
+
+Требования:
+1. Уровень сложности: {difficulty} ({difficulty_info['questions_style']})
+2. Каждый вопрос должен иметь 4 варианта ответа (A, B, C, D)
+3. Только один правильный ответ
+4. Вопросы должны проверять понимание темы
+5. Ответь СТРОГО в формате JSON без дополнительного текста:
+
+{{
+    "questions": [
+        {{
+            "question": "Текст вопроса",
+            "options": ["Вариант A", "Вариант B", "Вариант C", "Вариант D"],
+            "correct_answer": "Вариант A"
+        }}
+    ]
+}}
+
+Вопросы должны быть на русском языке."""
+            
+            user_prompt = f"Создай тест уровня '{difficulty}' по теме '{topic}' из раздела '{section}' предмета '{subject}'"
+            
+            # Формируем полный промпт
+            full_prompt = f"{system_prompt}\n\n{user_prompt}"
+            
+            # Получаем ответ от модели
+            response_text = self.ollama_client.invoke(full_prompt)
+            
+            if not response_text:
+                return self.generate_local_test(subject, section, topic, difficulty)
+            
+            # Очищаем ответ от возможных префиксов и markdown
+            response_text = response_text.strip()
+            
+            # Удаляем markdown код блоки если есть
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+            
+            # Парсим JSON ответ
+            try:
+                test_data = json.loads(response_text)
+                # Проверяем структуру
+                if "questions" not in test_data or not isinstance(test_data["questions"], list):
+                    raise ValueError("Неверная структура JSON")
+                return test_data
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"Ошибка парсинга JSON от Ollama: {e}")
+                print(f"Ответ модели: {response_text[:200]}...")
+                return self.generate_local_test(subject, section, topic, difficulty)
+            
+        except Exception as e:
+            print(f"Ошибка Ollama API для тестов: {e}")
             return self.generate_local_test(subject, section, topic, difficulty)
     
     def generate_openai_test(self, subject, section, topic, difficulty):
@@ -1114,7 +1212,7 @@ class TestingManager:
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("🔄 Попробовать снова", use_container_width=True):
+                if st.button("🔄 Попробовать снова", use_container_width=True, key="try_again_results_button"):
                     state['current_test'] = None
                     state['user_answers'] = {}
                     state['test_results'] = None
@@ -1122,7 +1220,7 @@ class TestingManager:
                     st.rerun()
             
             with col2:
-                if st.button("🎯 Другая тема", use_container_width=True):
+                if st.button("🎯 Другая тема", use_container_width=True, key="different_topic_results_button"):
                     state['current_test'] = None
                     state['user_answers'] = {}
                     state['test_results'] = None
@@ -1132,7 +1230,7 @@ class TestingManager:
                     st.rerun()
             
             with col3:
-                if st.button("📚 Изучить теорию", use_container_width=True):
+                if st.button("📚 Изучить теорию", use_container_width=True, key="study_theory_button"):
                     # Переключаемся на вкладку теории с той же темой
                     if 'theory_state' not in st.session_state:
                         st.session_state.theory_state = {}
@@ -1153,7 +1251,7 @@ class TestingManager:
             st.markdown("---")
             
             # Дополнительная кнопка для веселья
-            if st.button("🎪 Хочу еще анимацию!", use_container_width=True):
+            if st.button("🎪 Хочу еще анимацию!", use_container_width=True, key="more_animation_button"):
                 # Дополнительное празднование
                 self.show_animated_celebration(state['selected_subject'], results['percentage'])
                 self.play_sound_effect('excellent_result', state['selected_subject'])

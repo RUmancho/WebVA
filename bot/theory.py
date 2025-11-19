@@ -1,13 +1,13 @@
+from asyncio import threads
 import streamlit as st
 from bot.settings import OPENAI_API_KEY
+from langchain_ollama import OllamaLLM
 
 class TheoryManager:
     """Класс для управления теоретическими материалами"""
     
     def __init__(self):
         self.api_key = OPENAI_API_KEY
-        self.init_theory_session()
-        
         # Структура предметов и их разделов
         self.SUBJECTS_STRUCTURE = {
             "Алгебра": {
@@ -400,6 +400,56 @@ class TheoryManager:
                 }
             }
         }
+        self.init_theory_session()
+        self._init_ollama_client()
+    
+    def _init_ollama_client(self):
+        """Инициализация Ollama клиента для генерации теории"""
+        try:
+            # Пробуем использовать deepseek:7b
+            self.ollama_client = OllamaLLM(model="deepseek:7b", temperature=0.7)
+            self.model_name = "deepseek:7b"
+            print("Генерация теории использует модель: deepseek:7b")
+        except Exception as e:
+            try:
+                # Fallback на deepseek-r1:7b
+                print(f"Модель deepseek:7b недоступна для теории, пробуем deepseek-r1:7b: {e}")
+                self.ollama_client = OllamaLLM(model="deepseek-r1:7b", temperature=0.7)
+                self.model_name = "deepseek-r1:7b"
+                print("Генерация теории использует модель: deepseek-r1:7b")
+            except Exception as e2:
+                try:
+                    # Fallback на deepseek-coder:6.7b
+                    print(f"Модель deepseek-r1:7b недоступна, пробуем deepseek-coder:6.7b: {e2}")
+                    self.ollama_client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.7)
+                    self.model_name = "deepseek-coder:6.7b"
+                    print("Генерация теории использует модель: deepseek-coder:6.7b")
+                except Exception as e3:
+                    self.ollama_client = None
+                    self.model_name = "deepseek:7b"
+                    print(f"Ошибка инициализации Ollama клиента для теории: {e3}")
+                    print("Убедитесь, что Ollama установлен и модель deepseek:7b загружена")
+    
+    def _try_fallback_model(self):
+        """Попытка переключиться на резервную модель при ошибке"""
+        try:
+            if self.model_name == "deepseek:7b":
+                print("Пробуем переключиться на deepseek-r1:7b...")
+                self.ollama_client = OllamaLLM(model="deepseek-r1:7b", temperature=0.7)
+                self.model_name = "deepseek-r1:7b"
+                print("Успешно переключились на deepseek-r1:7b")
+            elif self.model_name == "deepseek-r1:7b":
+                print("Пробуем переключиться на deepseek-coder:6.7b...")
+                self.ollama_client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.7)
+                self.model_name = "deepseek-coder:6.7b"
+                print("Успешно переключились на deepseek-coder:6.7b")
+            else:
+                # Если все модели не работают, отключаем клиент
+                self.ollama_client = None
+                print("Все модели недоступны, отключаем Ollama клиент")
+        except Exception as e:
+            print(f"Ошибка при переключении на резервную модель: {e}")
+            self.ollama_client = None
     
     def init_theory_session(self):
         """Инициализация сессии для теории"""
@@ -415,6 +465,9 @@ class TheoryManager:
     def show_theory_interface(self):
         """Главный интерфейс теории"""
         try:
+            # Убеждаемся, что состояние инициализировано
+            self.init_theory_session()
+            
             st.header("📚 Теоретические материалы")
             
             # Навигационные кнопки
@@ -456,7 +509,7 @@ class TheoryManager:
             
             # Кнопка "Назад"
             if state['current_page'] != 'subjects':
-                if st.button("⬅️ Назад"):
+                if st.button("⬅️ Назад", key="theory_back_button"):
                     self.navigate_back()
                     st.rerun()
             
@@ -502,6 +555,10 @@ class TheoryManager:
                             if st.button(f"{icon} {subject}", key=f"subject_{subject}", use_container_width=True):
                                 st.session_state.theory_state['selected_subject'] = subject
                                 st.session_state.theory_state['current_page'] = 'sections'
+                                # Очищаем старые данные при выборе нового предмета
+                                st.session_state.theory_state['selected_section'] = None
+                                st.session_state.theory_state['selected_topic'] = None
+                                st.session_state.theory_state['explanation_text'] = None
                                 st.rerun()
             
         except Exception as e:
@@ -528,6 +585,9 @@ class TheoryManager:
                 if st.button(f"📖 {section_name}", key=f"section_{section_name}", use_container_width=True):
                     st.session_state.theory_state['selected_section'] = section_name
                     st.session_state.theory_state['current_page'] = 'topics'
+                    # Очищаем старое объяснение при выборе нового раздела
+                    st.session_state.theory_state['selected_topic'] = None
+                    st.session_state.theory_state['explanation_text'] = None
                     st.rerun()
             
         except Exception as e:
@@ -556,6 +616,8 @@ class TheoryManager:
                 if st.button(f"🎯 {topic}", key=f"topic_{topic}", use_container_width=True):
                     st.session_state.theory_state['selected_topic'] = topic
                     st.session_state.theory_state['current_page'] = 'explanation'
+                    # Очищаем старое объяснение при выборе новой темы
+                    st.session_state.theory_state['explanation_text'] = None
                     st.rerun()
             
         except Exception as e:
@@ -577,23 +639,37 @@ class TheoryManager:
             icon = self.SUBJECTS_STRUCTURE[subject]["icon"]
             st.subheader(f"{icon} {subject} → {section} → {topic}")
             
-            # Проверяем, есть ли уже объяснение
-            if not st.session_state.theory_state['explanation_text']:
-                with st.spinner("Загружаю объяснение темы..."):
-                    explanation = self.get_topic_explanation(subject, section, topic)
-                    st.session_state.theory_state['explanation_text'] = explanation
+            # Проверяем, есть ли уже объяснение (и это не шаблон ошибки)
+            explanation_text = st.session_state.theory_state.get('explanation_text')
+            is_error_template = explanation_text and "К сожалению, не удалось сгенерировать" in explanation_text
+            
+            if not explanation_text or is_error_template:
+                with st.spinner("Генерирую объяснение темы с помощью LLM..."):
+                    try:
+                        explanation = self.get_topic_explanation(subject, section, topic)
+                        st.session_state.theory_state['explanation_text'] = explanation
+                        explanation_text = explanation
+                    except Exception as e:
+                        print(f"Ошибка генерации объяснения: {e}")
+                        st.error(f"Ошибка генерации объяснения: {e}")
+                        explanation_text = self._get_error_message(subject, section, topic)
+                        st.session_state.theory_state['explanation_text'] = explanation_text
             
             # Отображаем объяснение
-            if st.session_state.theory_state['explanation_text']:
-                st.markdown(st.session_state.theory_state['explanation_text'])
+            if explanation_text:
+                st.markdown(explanation_text)
             else:
                 st.error("Не удалось загрузить объяснение. Попробуйте позже.")
             
             # Кнопка для нового объяснения
-            if st.button("🔄 Получить другое объяснение"):
-                with st.spinner("Загружаю новое объяснение..."):
-                    explanation = self.get_topic_explanation(subject, section, topic, regenerate=True)
-                    st.session_state.theory_state['explanation_text'] = explanation
+            if st.button("🔄 Получить другое объяснение", key="regenerate_explanation_button"):
+                with st.spinner("Генерирую новое объяснение с помощью LLM..."):
+                    try:
+                        explanation = self.get_topic_explanation(subject, section, topic, regenerate=True)
+                        st.session_state.theory_state['explanation_text'] = explanation
+                    except Exception as e:
+                        print(f"Ошибка регенерации объяснения: {e}")
+                        st.error(f"Ошибка генерации объяснения: {e}")
                 st.rerun()
             
         except Exception as e:
@@ -601,42 +677,136 @@ class TheoryManager:
             print(f"Ошибка отображения объяснения: {e}")
     
     def get_topic_explanation(self, subject, section, topic, regenerate=False):
-        """Получить объяснение темы от OpenAI"""
+        """Получить объяснение темы от LLM (Ollama или OpenAI)"""
         try:
-            if self.api_key:
+            # Приоритет: локальная LLM (Ollama), затем OpenAI
+            if self.ollama_client is not None:
+                return self.get_ollama_explanation(subject, section, topic, regenerate)
+            elif self.api_key:
                 return self.get_openai_explanation(subject, section, topic, regenerate)
             else:
-                return self.get_local_explanation(subject, section, topic)
+                return self._get_error_message(subject, section, topic)
         except Exception as e:
             print(f"Ошибка получения объяснения: {e}")
-            return self.get_local_explanation(subject, section, topic)
+            # Пробуем OpenAI как fallback, если Ollama не сработал
+            if self.api_key:
+                try:
+                    return self.get_openai_explanation(subject, section, topic, regenerate)
+                except Exception as e2:
+                    print(f"Ошибка OpenAI API: {e2}")
+                    return self._get_error_message(subject, section, topic)
+            return self._get_error_message(subject, section, topic)
+    
+    def get_ollama_explanation(self, subject, section, topic, regenerate=False):
+        """Получить объяснение от локальной LLM (Ollama)"""
+        # Создаем специальный промпт для учителя (выносим вне try для доступности в except)
+        system_prompt = f"""Ты опытный учитель {subject.lower()}а с 20-летним стажем. 
+Тебе необходимо просто и понятно объяснить тему "{topic}" из раздела "{section}".
+
+Требования к объяснению:
+1. Используй простой и доступный язык
+2. Приводи конкретные примеры
+3. Объясняй шаг за шагом
+4. Используй аналогии из повседневной жизни
+5. Структурируй материал логично
+6. Выделяй ключевые моменты
+7. Пиши на русском языке
+8. Объем: 300-500 слов
+
+Начни объяснение с краткого введения в тему, затем подробно разбери основные понятия и заверши практическими советами или примерами применения."""
+        
+        user_prompt = f"Объясни тему '{topic}' из раздела '{section}' предмета '{subject}'"
+        
+        # Формируем полный промпт
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+        
+        try:
+            if self.ollama_client is None:
+                print("Ollama клиент не инициализирован, пробуем OpenAI...")
+                # Если Ollama недоступен, пробуем OpenAI
+                if self.api_key:
+                    return self.get_openai_explanation(subject, section, topic, regenerate)
+                return self._get_error_message(subject, section, topic)
+            
+            print(f"Генерирую объяснение через Ollama (модель: {self.model_name})...")
+            # Получаем ответ от модели
+            response_text = self.ollama_client.invoke(full_prompt)
+            
+            if not response_text or len(response_text.strip()) == 0:
+                print("Пустой ответ от Ollama, пробуем OpenAI...")
+                # Если ответ пустой, пробуем OpenAI
+                if self.api_key:
+                    return self.get_openai_explanation(subject, section, topic, regenerate)
+                return self._get_error_message(subject, section, topic)
+            
+            # Очищаем ответ от возможных префиксов
+            response_text = response_text.strip()
+            print(f"Успешно получено объяснение от Ollama (длина: {len(response_text)} символов)")
+            
+            return response_text
+            
+        except Exception as e:
+            error_str = str(e)
+            print(f"Ошибка Ollama API для теории: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Если модель не найдена, пробуем переключиться на другую модель
+            if "not found" in error_str.lower() or "404" in error_str or "connection" in error_str.lower():
+                print(f"Модель {self.model_name} недоступна, пробуем переключиться на другую модель...")
+                self._try_fallback_model()
+                # Пробуем еще раз с новой моделью
+                if self.ollama_client is not None:
+                    try:
+                        print(f"Пробуем с моделью {self.model_name}...")
+                        response_text = self.ollama_client.invoke(full_prompt)
+                        if response_text and len(response_text.strip()) > 0:
+                            print(f"Успешно получено объяснение от fallback модели (длина: {len(response_text)} символов)")
+                            return response_text.strip()
+                    except Exception as e2:
+                        print(f"Ошибка при повторной попытке с fallback моделью: {e2}")
+            
+            # В случае любой ошибки пробуем OpenAI как fallback
+            if self.api_key:
+                try:
+                    print("Пробуем OpenAI как fallback...")
+                    return self.get_openai_explanation(subject, section, topic, regenerate)
+                except Exception as e3:
+                    print(f"Ошибка OpenAI API при fallback: {e3}")
+            
+            return self._get_error_message(subject, section, topic)
     
     def get_openai_explanation(self, subject, section, topic, regenerate=False):
         """Получить объяснение от OpenAI"""
         try:
-            import openai
+            from openai import OpenAI
             
-            openai.api_key = self.api_key
+            if not self.api_key:
+                print("OpenAI API ключ не установлен")
+                return self._get_error_message(subject, section, topic)
+            
+            print(f"Генерирую объяснение через OpenAI (модель: gpt-4o-mini)...")
+            client = OpenAI(api_key=self.api_key)
             
             # Создаем специальный промпт для учителя
             system_prompt = f"""Ты опытный учитель {subject.lower()}а с 20-летним стажем. 
-            Тебе необходимо просто и понятно объяснить тему "{topic}" из раздела "{section}".
-            
-            Требования к объяснению:
-            1. Используй простой и доступный язык
-            2. Приводи конкретные примеры
-            3. Объясняй шаг за шагом
-            4. Используй аналогии из повседневной жизни
-            5. Структурируй материал логично
-            6. Выделяй ключевые моменты
-            7. Пиши на русском языке
-            8. Объем: 300-500 слов
-            
-            Начни объяснение с краткого введения в тему, затем подробно разбери основные понятия и заверши практическими советами или примерами применения."""
+Тебе необходимо просто и понятно объяснить тему "{topic}" из раздела "{section}".
+
+Требования к объяснению:
+1. Используй простой и доступный язык
+2. Приводи конкретные примеры
+3. Объясняй шаг за шагом
+4. Используй аналогии из повседневной жизни
+5. Структурируй материал логично
+6. Выделяй ключевые моменты
+7. Пиши на русском языке
+8. Объем: 300-500 слов
+
+Начни объяснение с краткого введения в тему, затем подробно разбери основные понятия и заверши практическими советами или примерами применения."""
             
             user_prompt = f"Объясни тему '{topic}' из раздела '{section}' предмета '{subject}'"
             
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -646,78 +816,42 @@ class TheoryManager:
                 temperature=0.7
             )
             
-            return response.choices[0].message.content
+            if response and response.choices and len(response.choices) > 0:
+                content = response.choices[0].message.content
+                print(f"Успешно получено объяснение от OpenAI (длина: {len(content)} символов)")
+                return content
+            else:
+                print("Пустой ответ от OpenAI")
+                return self._get_error_message(subject, section, topic)
             
         except ImportError:
-            return self.get_local_explanation(subject, section, topic)
+            print("Библиотека openai не установлена")
+            return self._get_error_message(subject, section, topic)
         except Exception as e:
             print(f"Ошибка OpenAI API: {e}")
-            return self.get_local_explanation(subject, section, topic)
+            import traceback
+            traceback.print_exc()
+            return self._get_error_message(subject, section, topic)
     
-    def get_local_explanation(self, subject, section, topic):
-        """Локальное объяснение (заглушка)"""
-        try:
-            from pathlib import Path
-            
-            # Маппинг тем на имена файлов
-            topic_to_file = {
-                "Линейные уравнения": "linear_equations.txt",
-                "Треугольники": "triangles.txt",
-                "Кинематика": "kinematics.txt",
-                "Времена глаголов": "verb_tenses.txt"
-            }
-            
-            explanations_dir = Path(__file__).parent / "explanations"
-            
-            # Пытаемся загрузить объяснение из файла
-            if topic in topic_to_file:
-                filepath = explanations_dir / topic_to_file[topic]
-                if filepath.exists():
-                    with open(filepath, 'r', encoding="utf-8") as f:
-                        return f.read()
-            
-            # Если файл не найден, используем шаблон по умолчанию
-            default_file = explanations_dir / "default.txt"
-            if default_file.exists():
-                with open(default_file, 'r', encoding="utf-8") as f:
-                    template = f.read()
-                    return template.format(topic=topic, subject=subject, section=section)
-            
-            # Fallback если файлы не найдены
-            return f"""
-            ## {topic}
-            
-            К сожалению, подробное объяснение этой темы пока недоступно в локальном режиме.
-            
-            **Что можно сделать:**
-            1. Настройте API ключ OpenAI для получения полных объяснений
-            2. Обратитесь к учителю за дополнительной информацией
-            3. Используйте учебники и онлайн-ресурсы
-            
-            **Предмет:** {subject}
-            **Раздел:** {section}
-            **Тема:** {topic}
-            
-            Эта тема важна для понимания дальнейшего материала. Рекомендуем изучить её более подробно.
-            """
-        except Exception as e:
-            print(f"Ошибка загрузки локального объяснения: {e}")
-            return f"""
-            ## {topic}
-            
-            К сожалению, подробное объяснение этой темы пока недоступно в локальном режиме.
-            
-            **Что можно сделать:**
-            1. Настройте API ключ OpenAI для получения полных объяснений
-            2. Обратитесь к учителю за дополнительной информацией
-            3. Используйте учебники и онлайн-ресурсы
-            
-            **Предмет:** {subject}
-            **Раздел:** {section}
-            **Тема:** {topic}
-            
-            Эта тема важна для понимания дальнейшего материала. Рекомендуем изучить её более подробно.
-            """
+    def _get_error_message(self, subject, section, topic):
+        """Сообщение об ошибке, когда LLM недоступны"""
+        return f"""
+## {topic}
+
+**К сожалению, не удалось сгенерировать объяснение этой темы.**
+
+**Что можно сделать:**
+1. Убедитесь, что Ollama установлен и запущен, или настройте API ключ OpenAI
+2. Проверьте подключение к интернету (для OpenAI)
+3. Обратитесь к учителю за дополнительной информацией
+4. Используйте учебники и онлайн-ресурсы
+
+**Предмет:** {subject}  
+**Раздел:** {section}  
+**Тема:** {topic}
+
+Эта тема важна для понимания дальнейшего материала. Рекомендуем изучить её более подробно.
+"""
 
 # Создание экземпляра менеджера теории
 theory_manager = TheoryManager()

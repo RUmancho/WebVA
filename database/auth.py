@@ -81,7 +81,9 @@ class AuthManager:
                 return
             
             try:
-                success, user_data = db.authenticate_user(email, password)
+                # Нормализация email при входе
+                email_normalized = email.strip().lower()
+                success, user_data = db.authenticate_user(email_normalized, password)
                 if success:
                     AuthManager.login_user(user_data)
                     st.success("Успешный вход!")
@@ -171,9 +173,12 @@ class AuthManager:
                 st.error("Пароли не совпадают")
                 return
             
+            # Нормализация email (приведение к нижнему регистру и удаление пробелов)
+            email_normalized = email.strip().lower() if email else ''
+            
             # Подготовка данных для валидации
             registration_data = {
-                'email': email,
+                'email': email_normalized,
                 'password': password,
                 'first_name': first_name,
                 'last_name': last_name,

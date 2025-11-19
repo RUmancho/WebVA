@@ -1,10 +1,10 @@
-from sqlalchemy import create_engine, and_, or_
+from sqlalchemy import create_engine, and_, or_, func, text
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 import hashlib
 from datetime import datetime, timedelta
 from database.settings import DATABASE_URL
-from database.models import Base, User, StudentTeacherRelation, TeacherRequest, Call, LessonRecord
+from database.models import Base, User, StudentTeacherRelation, TeacherRequest, Call, LessonRecord, Notification
 
 class Database:
     """Класс для работы с базой данных через SQLAlchemy ORM"""
@@ -24,10 +24,44 @@ class Database:
         """Создание таблиц в базе данных"""
         try:
             Base.metadata.create_all(bind=self.engine)
+            # Обновление схемы для существующих таблиц
+            self.update_database_schema()
             return True
         except SQLAlchemyError as e:
             print(f"Ошибка создания таблиц: {e}")
             return False
+    
+    def update_database_schema(self):
+        """Обновление схемы базы данных (добавление отсутствующих столбцов)"""
+        try:
+            with self.engine.begin() as conn:
+                # Проверяем, существует ли таблица users
+                result = conn.execute(text(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
+                ))
+                table_exists = result.fetchone() is not None
+                
+                if not table_exists:
+                    # Таблица будет создана через Base.metadata.create_all
+                    return
+                
+                # Проверяем наличие столбца is_online в таблице users
+                result = conn.execute(text("PRAGMA table_info(users)"))
+                rows = result.fetchall()
+                
+                columns = [row[1] for row in rows]  # row[1] - это имя столбца
+                
+                # Добавляем столбец is_online, если его нет
+                if 'is_online' not in columns:
+                    try:
+                        conn.execute(text("ALTER TABLE users ADD COLUMN is_online BOOLEAN DEFAULT 0"))
+                        print("Столбец is_online успешно добавлен в таблицу users")
+                    except Exception as e:
+                        print(f"Ошибка добавления столбца is_online: {e}")
+                        raise
+                        
+        except Exception as e:
+            print(f"Ошибка обновления схемы базы данных: {e}")
     
     def get_session(self):
         """Получение сессии базы данных"""
@@ -41,10 +75,20 @@ class Database:
         """Регистрация нового пользователя"""
         session = self.get_session()
         try:
+            # Нормализация email (приведение к нижнему регистру и удаление пробелов)
+            email = user_data['email'].strip().lower() if user_data.get('email') else ''
+            
+            if not email:
+                return False, "Email не может быть пустым"
+            
             # Проверка на существование пользователя с таким email
-            existing_user = session.query(User).filter(User.email == user_data['email']).first()
-            if existing_user:
-                return False, "Пользователь с таким email уже существует"
+            # Получаем всех пользователей и проверяем в Python для надежности
+            all_users = session.query(User).all()
+            for user in all_users:
+                user_email_normalized = user.email.strip().lower() if user.email else ''
+                if user_email_normalized == email:
+                    print(f"Попытка регистрации с существующим email: {email} (найден пользователь ID: {user.id}, email в БД: '{user.email}')")
+                    return False, "Пользователь с таким email уже существует"
             
             # Хеширование пароля
             password_hash = self.hash_password(user_data['password'])
@@ -56,7 +100,7 @@ class Database:
             
             # Создание нового пользователя
             new_user = User(
-                email=user_data['email'],
+                email=email,
                 password_hash=password_hash,
                 first_name=user_data['first_name'],
                 last_name=user_data['last_name'],
@@ -71,13 +115,17 @@ class Database:
             session.commit()
             user_id = new_user.id
             
-            print(f"Пользователь {user_data['email']} успешно зарегистрирован")
+            print(f"Пользователь {email} успешно зарегистрирован (ID: {user_id})")
             return True, user_id
             
         except SQLAlchemyError as e:
             session.rollback()
             print(f"Ошибка регистрации пользователя: {e}")
             return False, f"Ошибка базы данных: {e}"
+        except Exception as e:
+            session.rollback()
+            print(f"Неожиданная ошибка при регистрации пользователя: {e}")
+            return False, f"Ошибка: {e}"
         finally:
             session.close()
     
@@ -85,10 +133,21 @@ class Database:
         """Аутентификация пользователя"""
         session = self.get_session()
         try:
+            # Нормализация email
+            email = email.strip().lower() if email else ''
+            
+            if not email:
+                return False, None
+            
             password_hash = self.hash_password(password)
-            user = session.query(User).filter(
-                and_(User.email == email, User.password_hash == password_hash)
-            ).first()
+            # Получаем всех пользователей и проверяем в Python для надежности
+            all_users = session.query(User).all()
+            user = None
+            for u in all_users:
+                user_email_normalized = u.email.strip().lower() if u.email else ''
+                if user_email_normalized == email and u.password_hash == password_hash:
+                    user = u
+                    break
             
             if user:
                 user_dict = {
@@ -98,6 +157,7 @@ class Database:
                     'last_name': user.last_name,
                     'role': user.role,
                     'city': user.city,
+                    'is_online': user.is_online if hasattr(user, 'is_online') else False,
                     'school': user.school,
                     'class_number': user.class_number,
                     'subjects': user.subjects,
@@ -111,6 +171,9 @@ class Database:
                 
         except SQLAlchemyError as e:
             print(f"Ошибка аутентификации: {e}")
+            return False, None
+        except Exception as e:
+            print(f"Неожиданная ошибка при аутентификации: {e}")
             return False, None
         finally:
             session.close()
@@ -129,7 +192,8 @@ class Database:
                     'last_name': teacher.last_name,
                     'subjects': teacher.subjects,
                     'city': teacher.city,
-                    'school': teacher.school
+                    'school': teacher.school,
+                    'is_online': teacher.is_online if hasattr(teacher, 'is_online') else False
                 })
             
             return teachers_list
@@ -362,7 +426,8 @@ class Database:
                     'last_name': teacher.last_name,
                     'subjects': teacher.subjects,
                     'school': teacher.school,
-                    'city': teacher.city
+                    'city': teacher.city,
+                    'is_online': teacher.is_online if hasattr(teacher, 'is_online') else False
                 })
             
             return teachers_list
@@ -649,7 +714,8 @@ class Database:
                     'email': student.email,
                     'city': student.city,
                     'school': student.school,
-                    'class_number': student.class_number
+                    'class_number': student.class_number,
+                    'is_online': student.is_online if hasattr(student, 'is_online') else False
                 })
             
             return students_list
@@ -705,7 +771,8 @@ class Database:
                     'email': student.email,
                     'city': student.city,
                     'school': student.school,
-                    'class_number': student.class_number
+                    'class_number': student.class_number,
+                    'is_online': student.is_online if hasattr(student, 'is_online') else False
                 })
             
             return students_list
@@ -713,6 +780,134 @@ class Database:
         except SQLAlchemyError as e:
             print(f"Ошибка получения учеников учителя: {e}")
             return []
+        finally:
+            session.close()
+    
+    def update_user_online_status(self, user_id, is_online):
+        """Обновление статуса онлайн пользователя"""
+        session = self.get_session()
+        try:
+            user = session.query(User).filter(User.id == user_id).first()
+            if user:
+                user.is_online = is_online
+                session.commit()
+                return True
+            return False
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Ошибка обновления статуса онлайн: {e}")
+            return False
+        finally:
+            session.close()
+    
+    def get_user_notifications(self, user_id):
+        """Получение уведомлений пользователя"""
+        session = self.get_session()
+        try:
+            notifications = session.query(Notification).filter(
+                Notification.user_id == user_id
+            ).order_by(Notification.created_at.desc()).all()
+            
+            notifications_list = []
+            for notification in notifications:
+                notifications_list.append({
+                    'id': notification.id,
+                    'user_id': notification.user_id,
+                    'title': notification.title,
+                    'message': notification.message,
+                    'is_read': notification.is_read,
+                    'created_at': notification.created_at.strftime('%Y-%m-%d %H:%M:%S') if notification.created_at else None
+                })
+            
+            return notifications_list
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения уведомлений: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def mark_notification_read(self, notification_id, user_id):
+        """Отметить уведомление как прочитанное"""
+        session = self.get_session()
+        try:
+            notification = session.query(Notification).filter(
+                and_(Notification.id == notification_id, Notification.user_id == user_id)
+            ).first()
+            
+            if not notification:
+                return False, "Уведомление не найдено"
+            
+            notification.is_read = True
+            session.commit()
+            return True, "Уведомление отмечено как прочитанное"
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Ошибка отметки уведомления: {e}")
+            return False, f"Ошибка базы данных: {e}"
+        finally:
+            session.close()
+    
+    def create_notification(self, user_id, title, message):
+        """Создание нового уведомления"""
+        session = self.get_session()
+        try:
+            new_notification = Notification(
+                user_id=user_id,
+                title=title,
+                message=message,
+                is_read=False
+            )
+            
+            session.add(new_notification)
+            session.commit()
+            notification_id = new_notification.id
+            
+            return True, notification_id
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Ошибка создания уведомления: {e}")
+            return False, f"Ошибка базы данных: {e}"
+        finally:
+            session.close()
+    
+    def get_teacher_students_tree(self, teacher_id):
+        """Получение древовидной структуры учеников учителя: Город → Школа → Класс → Ученики"""
+        session = self.get_session()
+        try:
+            students = session.query(User).join(
+                StudentTeacherRelation, StudentTeacherRelation.student_id == User.id
+            ).filter(StudentTeacherRelation.teacher_id == teacher_id).order_by(
+                User.city, User.school, User.class_number, User.first_name, User.last_name
+            ).all()
+            
+            tree = {}
+            for student in students:
+                city = student.city or "Не указан"
+                school = student.school or "Не указана"
+                class_num = student.class_number or "Не указан"
+                
+                if city not in tree:
+                    tree[city] = {}
+                if school not in tree[city]:
+                    tree[city][school] = {}
+                if class_num not in tree[city][school]:
+                    tree[city][school][class_num] = []
+                
+                tree[city][school][class_num].append({
+                    'id': student.id,
+                    'first_name': student.first_name,
+                    'last_name': student.last_name,
+                    'email': student.email,
+                    'city': student.city,
+                    'school': student.school,
+                    'class_number': student.class_number,
+                    'is_online': student.is_online if hasattr(student, 'is_online') else False
+                })
+            
+            return tree
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения дерева учеников: {e}")
+            return {}
         finally:
             session.close()
 

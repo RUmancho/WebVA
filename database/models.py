@@ -19,6 +19,7 @@ class User(Base):
     school = Column(String(255))
     class_number = Column(String(10))  # Для учеников
     subjects = Column(Text)  # Для учителей (через запятую)
+    is_online = Column(Boolean, default=False)  # Статус онлайн/офлайн
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Связи
@@ -33,6 +34,9 @@ class User(Base):
     teacher_requests = relationship("TeacherRequest", foreign_keys="TeacherRequest.teacher_id", back_populates="teacher")
     teacher_calls = relationship("Call", foreign_keys="Call.teacher_id", back_populates="teacher")
     teacher_lessons = relationship("LessonRecord", foreign_keys="LessonRecord.teacher_id", back_populates="teacher")
+    
+    # Уведомления
+    notifications = relationship("Notification", back_populates="user")
     
     def __repr__(self):
         return f"<User(id={self.id}, email='{self.email}', role='{self.role}')>"
@@ -132,3 +136,20 @@ class LessonRecord(Base):
     
     def __repr__(self):
         return f"<LessonRecord(id={self.id}, title='{self.lesson_title}', student_id={self.student_id}, teacher_id={self.teacher_id})>"
+
+class Notification(Base):
+    """Модель уведомления"""
+    __tablename__ = 'notifications'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Связи
+    user = relationship("User", back_populates="notifications")
+    
+    def __repr__(self):
+        return f"<Notification(id={self.id}, user_id={self.user_id}, title='{self.title}', is_read={self.is_read})>"
