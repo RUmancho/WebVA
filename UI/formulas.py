@@ -3,10 +3,7 @@ import math
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
-from constants.math import *
-from constants.physics import *
 
-# Добавляем путь к корню проекта для импорта формул
 CURRENT_DIR = Path(__file__).parent
 PROJECT_ROOT = CURRENT_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -21,6 +18,15 @@ except Exception as e:
     Force = None
     Energy = None
     PhysicsUtils = None
+
+# Физические константы
+g = 9.80665  # Ускорение свободного падения, м/с²
+G = 6.67430e-11  # Гравитационная постоянная, Н·м²/кг²
+k = 8.987551789e9  # Постоянная Кулона, Н·м²/Кл²
+c = 299792458.0  # Скорость света, м/с
+h = 6.62607015e-34  # Постоянная Планка, Дж·с
+R = 8.314462618  # Универсальная газовая постоянная, Дж/(моль·К)
+PI = math.pi  # Число π
 
 
 class FormulaManager:
@@ -384,10 +390,10 @@ class FormulaManager:
                     elif formula_name == "Второй закон Ньютона":
                         if target == "m":
                             # F = m * a => m = F / a
-                            return values['F'] / values['a']
+                            return Force.newton_mass(values['F'], values['a'])
                         elif target == "a":
                             # F = m * a => a = F / m
-                            return values['F'] / values['m']
+                            return Force.newton_acceleration(values['F'], values['m'])
                         else:  # F
                             return Force.newton_second_law(values['m'], values['a'])
                     
@@ -437,13 +443,13 @@ class FormulaManager:
                     elif formula_name == "Центростремительная сила":
                         if target == "m":
                             # F = m * V² / r => m = F * r / V²
-                            return (values['F'] * values['r']) / (values['V'] ** 2)
+                            return Force.centripetal_mass(values['F'], values['V'], values['r'])
                         elif target == "V":
                             # F = m * V² / r => V = sqrt(F * r / m)
-                            return math.sqrt((values['F'] * values['r']) / values['m'])
+                            return Force.centripetal_velocity(values['F'], values['m'], values['r'])
                         elif target == "r":
                             # F = m * V² / r => r = m * V² / F
-                            return (values['m'] * values['V'] ** 2) / values['F']
+                            return Force.centripetal_radius(values['F'], values['m'], values['V'])
                         else:  # F
                             return Force.centripetal(values['m'], values['V'], values['r'])
                     
@@ -480,10 +486,10 @@ class FormulaManager:
                     elif formula_name == "Кинетическая энергия":
                         if target == "m":
                             # E = m * V² / 2 => m = 2 * E / V²
-                            return (2 * values['E']) / (values['V'] ** 2)
+                            return Energy.kinetic_mass(values['E'], values['V'])
                         elif target == "V":
                             # E = m * V² / 2 => V = sqrt(2 * E / m)
-                            return math.sqrt((2 * values['E']) / values['m'])
+                            return Energy.kinetic_velocity(values['E'], values['m'])
                         else:  # E
                             return Energy.kinetic(values['m'], values['V'])
                     
@@ -491,11 +497,11 @@ class FormulaManager:
                         if target == "m":
                             # E = m * g * h => m = E / (g * h)
                             g_val = values.get('g', g)
-                            return values['E'] / (g_val * values['h'])
+                            return Energy.potential_mass(values['E'], values['h'], g_val)
                         elif target == "h":
                             # E = m * g * h => h = E / (m * g)
                             g_val = values.get('g', g)
-                            return values['E'] / (values['m'] * g_val)
+                            return Energy.potential_height(values['E'], values['m'], g_val)
                         elif target == "g":
                             # E = m * g * h => g = E / (m * h)
                             return values['E'] / (values['m'] * values['h'])
@@ -506,10 +512,10 @@ class FormulaManager:
                     elif formula_name == "Потенциальная энергия упругости":
                         if target == "k":
                             # E = k * x² / 2 => k = 2 * E / x²
-                            return (2 * values['E']) / (values['x'] ** 2)
+                            return Energy.elastic_potential_k(values['E'], values['x'])
                         elif target == "x":
                             # E = k * x² / 2 => x = sqrt(2 * E / k)
-                            return math.sqrt((2 * values['E']) / values['k'])
+                            return Energy.elastic_potential_x(values['E'], values['k'])
                         else:  # E
                             return Energy.elastic_potential(values['k'], values['x'])
                     
@@ -699,15 +705,12 @@ class FormulaManager:
                     elif formula_name == "Энергия активации":
                         if target == "pre_exponential":
                             # E_a = -R * T * ln(k / A) => A = k / exp(-E_a / (R * T))
-                            from constants.physics import R
                             return values['rate_constant'] / math.exp(-values['E_a'] / (R * values['T']))
                         elif target == "rate_constant":
                             # E_a = -R * T * ln(k / A) => k = A * exp(-E_a / (R * T))
-                            from constants.physics import R
                             return values['pre_exponential'] * math.exp(-values['E_a'] / (R * values['T']))
                         elif target == "T":
                             # E_a = -R * T * ln(k / A) => T = -E_a / (R * ln(k / A))
-                            from constants.physics import R
                             return -values['E_a'] / (R * math.log(values['rate_constant'] / values['pre_exponential']))
                         else:  # E_a
                             return Energy.activation_energy(values['pre_exponential'], values['rate_constant'], values['T'])

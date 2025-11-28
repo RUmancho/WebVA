@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime
 import json
+import socket
 from bot.settings import CHAT_BOT_NAME, CHAT_SYSTEM_MESSAGE
 from bot.prompt_loader import load_prompt
 from langchain_ollama import OllamaLLM
@@ -11,46 +12,71 @@ class ChatBot:
     def __init__(self):
         self.bot_name = CHAT_BOT_NAME
         self.system_message = CHAT_SYSTEM_MESSAGE
-        self.init_chat_session()
+        # Не инициализируем session_state здесь, так как он может быть недоступен при импорте
+        # Инициализация будет выполнена в show_chat_interface()
         self._init_ollama_client()
+    
+    def _check_ollama_server_available(self):
+        """Проверка доступности Ollama сервера через проверку порта"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('localhost', 11434))
+            sock.close()
+            return result == 0
+        except Exception as e:
+            print(f"Ошибка проверки доступности Ollama сервера: {e}")
+            return False
     
     def _init_ollama_client(self):
         """Инициализация Ollama клиента для чат-бота"""
+        # Проверяем доступность сервера перед инициализацией
+        if not self._check_ollama_server_available():
+            print("Ollama сервер недоступен (порт 11434 не отвечает), чат-бот будет использовать локальные ответы")
+            self.ollama_client = None
+            self.model_name = "deepseek-r1:7b"
+            return
+        
         try:
-            # Пробуем использовать deepseek:7b
-            self.ollama_client = OllamaLLM(model="deepseek:7b", temperature=0.7)
-            self.model_name = "deepseek:7b"
-            print("Чат-бот использует модель: deepseek:7b")
+            # Пробуем использовать deepseek-r1:7b
+            self.ollama_client = OllamaLLM(model="deepseek-r1:7b", temperature=0.7)
+            self.model_name = "deepseek-r1:7b"
+            print("Чат-бот использует модель: deepseek-r1:7b")
         except Exception as e:
             try:
-                # Fallback на deepseek-r1:7b
-                print(f"Модель deepseek:7b недоступна для чат-бота, пробуем deepseek-r1:7b: {e}")
-                self.ollama_client = OllamaLLM(model="deepseek-r1:7b", temperature=0.7)
-                self.model_name = "deepseek-r1:7b"
-                print("Чат-бот использует модель: deepseek-r1:7b")
+                # Fallback на deepseek:7b
+                print(f"Модель deepseek-r1:7b недоступна для чат-бота, пробуем deepseek:7b: {e}")
+                self.ollama_client = OllamaLLM(model="deepseek:7b", temperature=0.7)
+                self.model_name = "deepseek:7b"
+                print("Чат-бот использует модель: deepseek:7b")
             except Exception as e2:
                 try:
                     # Fallback на deepseek-coder:6.7b
-                    print(f"Модель deepseek-r1:7b недоступна, пробуем deepseek-coder:6.7b: {e2}")
+                    print(f"Модель deepseek:7b недоступна, пробуем deepseek-coder:6.7b: {e2}")
                     self.ollama_client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.7)
                     self.model_name = "deepseek-coder:6.7b"
                     print("Чат-бот использует модель: deepseek-coder:6.7b")
                 except Exception as e3:
                     self.ollama_client = None
-                    self.model_name = "deepseek:7b"
+                    self.model_name = "deepseek-r1:7b"
                     print(f"Ошибка инициализации Ollama клиента для чат-бота: {e3}")
-                    print("Убедитесь, что Ollama установлен и модель deepseek:7b загружена")
+                    print("Убедитесь, что Ollama установлен и модель deepseek-r1:7b загружена")
     
     def init_chat_session(self):
         """Инициализация сессии чата"""
-        if 'chat_messages' not in st.session_state:
-            st.session_state.chat_messages = [
-                {
-                    "role": "assistant",
-                    "content": f"Привет! Я {self.bot_name}, ваш помощник. Как дела? Чем могу помочь?",
-                    "timestamp": datetime.now().strftime("%H:%M")
-                }
-            ]
+        try:
+            if 'chat_messages' not in st.session_state:
+                st.session_state.chat_messages = [
+                    {
+                        "role": "assistant",
+                        "content": f"Привет! Я {self.bot_name}, ваш помощник. Как дела? Чем могу помочь?",
+                        "timestamp": datetime.now().strftime("%H:%M")
+                    }
+                ]
+        except Exception as e:
+            # Если session_state недоступен, просто игнорируем ошибку
+            # Инициализация будет выполнена позже, когда session_state станет доступен
+            print(f"Предупреждение: не удалось инициализировать сессию чата: {e}")
     
     def add_message(self, role, content):
         """Добавление сообщения в историю чата"""
@@ -67,6 +93,9 @@ class ChatBot:
     def get_bot_response(self, user_message):
         """Получение ответа от бота"""
         try:
+            # Инициализация сессии чата (если еще не инициализировано)
+            self.init_chat_session()
+            
             # Используем Ollama для чат-бота
             if self.ollama_client is not None:
                 return self.get_ollama_response(user_message)
@@ -79,6 +108,9 @@ class ChatBot:
     def get_ollama_response(self, user_message):
         """Получение ответа от Ollama (DeepSeek 7B)"""
         try:
+            # Инициализация сессии чата (если еще не инициализировано)
+            self.init_chat_session()
+            
             if self.ollama_client is None:
                 return self.get_local_response(user_message)
             
@@ -159,6 +191,9 @@ class ChatBot:
     
     def show_chat_interface(self):
         """Отображение интерфейса чата"""
+        # Инициализация сессии чата (если еще не инициализировано)
+        self.init_chat_session()
+        
         st.header("💬 Чат с помощником")
         
         # Контейнер для сообщений
@@ -207,6 +242,9 @@ class ChatBot:
     
     def clear_chat_history(self):
         """Очистка истории чата"""
+        # Инициализация сессии чата (если еще не инициализировано)
+        self.init_chat_session()
+        
         st.session_state.chat_messages = [
             {
                 "role": "assistant",

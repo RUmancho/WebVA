@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import random
+import socket
 from bot.settings import OPENAI_API_KEY
 from bot.theory import TheoryManager
 from langchain_ollama import OllamaLLM
@@ -12,35 +13,55 @@ class TestingManager:
         self.api_key = OPENAI_API_KEY
         self.theory_manager = TheoryManager()
         self.SUBJECTS_STRUCTURE = self.theory_manager.SUBJECTS_STRUCTURE
-        self.init_testing_session()
+        # Не инициализируем session_state здесь, так как он может быть недоступен при импорте
+        # Инициализация будет выполнена в show_testing_interface()
         self._init_ollama_client()
+    
+    def _check_ollama_server_available(self):
+        """Проверка доступности Ollama сервера через проверку порта"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('localhost', 11434))
+            sock.close()
+            return result == 0
+        except Exception as e:
+            print(f"Ошибка проверки доступности Ollama сервера: {e}")
+            return False
     
     def _init_ollama_client(self):
         """Инициализация Ollama клиента для генерации тестов"""
+        # Проверяем доступность сервера перед инициализацией
+        if not self._check_ollama_server_available():
+            print("Ollama сервер недоступен (порт 11434 не отвечает), тесты будут генерироваться локально")
+            self.ollama_client = None
+            self.model_name = "deepseek-r1:7b"
+            return
+        
         try:
-            # Пробуем использовать deepseek:7b
-            self.ollama_client = OllamaLLM(model="deepseek:7b", temperature=0.7)
-            self.model_name = "deepseek:7b"
-            print("Генерация тестов использует модель: deepseek:7b")
+            # Пробуем использовать deepseek-r1:7b
+            self.ollama_client = OllamaLLM(model="deepseek-r1:7b", temperature=0.7)
+            self.model_name = "deepseek-r1:7b"
+            print("Генерация тестов использует модель: deepseek-r1:7b")
         except Exception as e:
             try:
-                # Fallback на deepseek-r1:7b
-                print(f"Модель deepseek:7b недоступна для тестов, пробуем deepseek-r1:7b: {e}")
-                self.ollama_client = OllamaLLM(model="deepseek-r1:7b", temperature=0.7)
-                self.model_name = "deepseek-r1:7b"
-                print("Генерация тестов использует модель: deepseek-r1:7b")
+                # Fallback на deepseek:7b
+                print(f"Модель deepseek-r1:7b недоступна для тестов, пробуем deepseek:7b: {e}")
+                self.ollama_client = OllamaLLM(model="deepseek:7b", temperature=0.7)
+                self.model_name = "deepseek:7b"
+                print("Генерация тестов использует модель: deepseek:7b")
             except Exception as e2:
                 try:
                     # Fallback на deepseek-coder:6.7b
-                    print(f"Модель deepseek-r1:7b недоступна, пробуем deepseek-coder:6.7b: {e2}")
+                    print(f"Модель deepseek:7b недоступна, пробуем deepseek-coder:6.7b: {e2}")
                     self.ollama_client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.7)
                     self.model_name = "deepseek-coder:6.7b"
                     print("Генерация тестов использует модель: deepseek-coder:6.7b")
                 except Exception as e3:
                     self.ollama_client = None
-                    self.model_name = "deepseek:7b"
+                    self.model_name = "deepseek-r1:7b"
                     print(f"Ошибка инициализации Ollama клиента для тестов: {e3}")
-                    print("Убедитесь, что Ollama установлен и модель deepseek:7b загружена")
+                    print("Убедитесь, что Ollama установлен и модель deepseek-r1:7b загружена")
         
         # Уровни сложности
         self.DIFFICULTY_LEVELS = {
@@ -232,18 +253,23 @@ class TestingManager:
     
     def init_testing_session(self):
         """Инициализация сессии для тестирования"""
-        if 'testing_state' not in st.session_state:
-            st.session_state.testing_state = {
-                'current_page': 'subjects',  # subjects, sections, topics, difficulty, test, results
-                'selected_subject': None,
-                'selected_section': None, 
-                'selected_topic': None,
-                'selected_difficulty': None,
-                'current_test': None,
-                'user_answers': {},
-                'test_results': None,
-                'current_question': 0
-            }
+        try:
+            if 'testing_state' not in st.session_state:
+                st.session_state.testing_state = {
+                    'current_page': 'subjects',  # subjects, sections, topics, difficulty, test, results
+                    'selected_subject': None,
+                    'selected_section': None, 
+                    'selected_topic': None,
+                    'selected_difficulty': None,
+                    'current_test': None,
+                    'user_answers': {},
+                    'test_results': None,
+                    'current_question': 0
+                }
+        except Exception as e:
+            # Если session_state недоступен, просто игнорируем ошибку
+            # Инициализация будет выполнена позже, когда session_state станет доступен
+            print(f"Предупреждение: не удалось инициализировать сессию тестирования: {e}")
     
     def play_sound_effect(self, sound_type, subject=None):
         """Воспроизведение звуковых эффектов"""
@@ -392,6 +418,9 @@ class TestingManager:
     def show_testing_interface(self):
         """Главный интерфейс тестирования"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             st.header("📝 Система тестирования")
             
             # Навигационные кнопки
@@ -420,6 +449,9 @@ class TestingManager:
     def show_navigation(self):
         """Показать навигационные кнопки"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             state = st.session_state.testing_state
             
             # Хлебные крошки
@@ -452,6 +484,9 @@ class TestingManager:
     def navigate_back(self):
         """Навигация назад"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             state = st.session_state.testing_state
             
             if state['current_page'] == 'results':
@@ -475,6 +510,9 @@ class TestingManager:
     def show_subjects(self):
         """Показать список предметов"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             st.subheader("Выберите предмет для тестирования:")
             st.success("🎓 Добро пожаловать в систему тестирования! Выберите предмет и проверьте свои знания!")
             
@@ -514,6 +552,9 @@ class TestingManager:
     def show_sections(self):
         """Показать разделы выбранного предмета"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             subject = st.session_state.testing_state['selected_subject']
             if not subject:
                 st.session_state.testing_state['current_page'] = 'subjects'
@@ -540,6 +581,9 @@ class TestingManager:
     def show_topics(self):
         """Показать темы выбранного раздела"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             subject = st.session_state.testing_state['selected_subject']
             section = st.session_state.testing_state['selected_section']
             
@@ -576,6 +620,9 @@ class TestingManager:
     def show_difficulty_selection(self):
         """Показать выбор уровня сложности"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             subject = st.session_state.testing_state['selected_subject']
             section = st.session_state.testing_state['selected_section']
             topic = st.session_state.testing_state['selected_topic']
@@ -624,6 +671,9 @@ class TestingManager:
     def show_test(self):
         """Показать тест"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             state = st.session_state.testing_state
             
             if not all([state['selected_subject'], state['selected_section'], 
@@ -672,6 +722,9 @@ class TestingManager:
     def display_test(self):
         """Отображение теста"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             state = st.session_state.testing_state
             test = state['current_test']
             
@@ -1018,6 +1071,9 @@ class TestingManager:
     def calculate_results(self):
         """Подсчет результатов теста"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             state = st.session_state.testing_state
             test = state['current_test']
             answers = state['user_answers']
@@ -1108,6 +1164,9 @@ class TestingManager:
     def show_results(self):
         """Показать результаты теста"""
         try:
+            # Инициализация сессии тестирования (если еще не инициализировано)
+            self.init_testing_session()
+            
             state = st.session_state.testing_state
             results = state['test_results']
             

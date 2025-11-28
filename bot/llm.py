@@ -3,6 +3,7 @@ import re
 import enum
 import datetime
 import time
+import socket
 from bot.prompt_loader import load_prompt, load_prompt_with_format
 
 class AIMode(enum.Enum):
@@ -96,31 +97,34 @@ class LLM:
             self._roles_cache = self._load_roles()
         return self._roles_cache
 
-    def __init__(self):
+    def _check_ollama_server_available(self):
+        """Проверка доступности Ollama сервера через проверку порта"""
         try:
-            # Пробуем использовать deepseek:7b
-            self.client = OllamaLLM(model="deepseek:7b", temperature=0.3)
-            self.model_name = "deepseek:7b"
-            print("Используется модель: deepseek:7b")
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('localhost', 11434))
+            sock.close()
+            return result == 0
         except Exception as e:
-            try:
-                # Fallback на deepseek-r1:7b если deepseek:7b недоступна
-                print(f"Модель deepseek:7b недоступна, пробуем deepseek-r1:7b: {e}")
-                self.client = OllamaLLM(model="deepseek-r1:7b", temperature=0.3)
-                self.model_name = "deepseek-r1:7b"
-                print("Используется модель: deepseek-r1:7b")
-            except Exception as e2:
-                try:
-                    # Fallback на deepseek-coder:6.7b
-                    print(f"Модель deepseek-r1:7b недоступна, пробуем deepseek-coder:6.7b: {e2}")
-                    self.client = OllamaLLM(model="deepseek-coder:6.7b", temperature=0.3)
-                    self.model_name = "deepseek-coder:6.7b"
-                    print("Используется модель: deepseek-coder:6.7b")
-                except Exception as e3:
-                    self.client = None
-                    self.model_name = "deepseek:7b"
-                    print(f"Ошибка инициализации Ollama клиента: {e3}")
-                    print("Убедитесь, что Ollama установлен и модель deepseek:7b загружена")
+            print(f"Ошибка проверки доступности Ollama сервера: {e}")
+            return False
+    
+    def __init__(self):
+        # Проверяем доступность сервера перед инициализацией
+        if not self._check_ollama_server_available():
+            print("Ollama сервер недоступен (порт 11434 не отвечает), LLM будет недоступен")
+            self.client = None
+            self.model_name = "deepseek-r1:7b"
+        else:
+            self.client = OllamaLLM(model="deepseek-r1:7b", 
+                temperature=0.0, 
+                num_thread = 1, 
+                num_ctx = 1000,
+                reasoning = False
+            )
+            self.model_name = "deepseek-r1:7b"
+            print("Используется модель: deepseek-r1:7b")
+            
 
         self.role = ""
         self.task = ""
