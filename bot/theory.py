@@ -52,11 +52,15 @@ class OllamaProvider(LLMProvider):
         """Инициализация Ollama клиента"""
         try:
             # Создаем словарь параметров, исключая temperature из kwargs если он там есть
-            ollama_kwargs = {k: v for k, v in self.kwargs.items() if k != 'temperature'}
+            ollama_kwargs = {k: v for k, v in self.kwargs.items() if k != 'temperature' and k != 'reasoning'}
             ollama_kwargs['temperature'] = self.temperature
+            # Отключаем reasoning для deepseek-r1, чтобы убрать раздумья
+            if 'deepseek-r1' in self.model_name.lower():
+                ollama_kwargs['reasoning'] = False
             
             self.client = OllamaLLM(
                 model=self.model_name,
+                num_thread=1,
                 **ollama_kwargs
             )
             print(f"Ollama клиент создан для модели {self.model_name}")
@@ -152,17 +156,7 @@ class TheoryManager:
     }
     
     def __init__(self, llm_provider: str = "ollama", model_name: Optional[str] = None, 
-                 temperature: float = 0.7, api_key: Optional[str] = None, **llm_kwargs):
-        """
-        Инициализация TheoryManager
-        
-        Args:
-            llm_provider: Провайдер LLM ("ollama" или "openai")
-            model_name: Название модели (например, "deepseek-r1:7b" для Ollama или "gpt-4o-mini" для OpenAI)
-            temperature: Температура для генерации (по умолчанию 0.7)
-            api_key: API ключ для OpenAI (если не указан, используется из settings)
-            **llm_kwargs: Дополнительные параметры для LLM
-        """
+                 temperature: float = 0.0, api_key: Optional[str] = None, **llm_kwargs):
         self.api_key = api_key or OPENAI_API_KEY
         self.SUBJECTS_STRUCTURE = topics.SUBJECTS_STRUCTURE
         
@@ -201,7 +195,9 @@ class TheoryManager:
                 'selected_subject': None,
                 'selected_section': None,
                 'selected_topic': None,
-                'explanation_text': None
+                'explanation_text': None,
+                'topic_chat_active': False,
+                'topic_chat_messages': []
             }
     
     def _clean_text_from_cursor(self, text: str) -> str:
@@ -459,11 +455,153 @@ class TheoryManager:
                 if clean_text != explanation_text:
                     self._save_explanation_text(clean_text)
         
-        # Кнопка для нового объяснения
-        if st.button("🔄 Получить другое объяснение", key="regenerate_explanation_button"):
-            state['explanation_text'] = None
-            state['explanation_displayed'] = False
+        # Кнопки управления
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Получить другое объяснение", key="regenerate_explanation_button", use_container_width=True):
+                state['explanation_text'] = None
+                state['explanation_displayed'] = False
+                state['topic_chat_active'] = False
+                state['topic_chat_messages'] = []
+                st.rerun()
+        
+        with col2:
+            chat_button_text = "❌ Закрыть чат" if state.get('topic_chat_active') else "💬 Задать вопрос по теме"
+            if st.button(chat_button_text, key="toggle_topic_chat_button", use_container_width=True):
+                state['topic_chat_active'] = not state.get('topic_chat_active', False)
+                if not state['topic_chat_active']:
+                    state['topic_chat_messages'] = []
+                st.rerun()
+        
+        # Показываем чат по теме, если он активен
+        if state.get('topic_chat_active') and explanation_text:
+            self._show_topic_chat(subject, section, topic, explanation_text)
+    
+    def _show_topic_chat(self, subject: str, section: str, topic: str, explanation_text: str):
+        """Показать чат для обсуждения темы"""
+        st.markdown("---")
+        st.subheader("💬 Обсуждение темы")
+        
+        state = st.session_state.theory_state
+        
+        # Инициализируем сообщения чата, если их нет
+        if 'topic_chat_messages' not in state:
+            state['topic_chat_messages'] = []
+        
+        # Если чат только что открыт, добавляем приветственное сообщение
+        if len(state['topic_chat_messages']) == 0:
+            state['topic_chat_messages'] = [{
+                "role": "assistant",
+                "content": f"Привет! Я готов ответить на твои вопросы по теме '{topic}' из раздела '{section}' предмета '{subject}'. Задавай вопросы!"
+            }]
+        
+        # Отображаем историю сообщений
+        for message in state['topic_chat_messages']:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
+        
+        # Поле ввода вопроса
+        user_question = st.chat_input("Задайте вопрос по теме...")
+        
+        if user_question:
+            # Добавляем вопрос пользователя
+            state['topic_chat_messages'].append({
+                "role": "user",
+                "content": user_question
+            })
+            
+            # Отображаем вопрос
+            with st.chat_message("user"):
+                st.write(user_question)
+            
+            # Получаем ответ от LLM
+            with st.chat_message("assistant"):
+                with st.spinner("Думаю..."):
+                    try:
+                        answer = self._get_topic_chat_response(subject, section, topic, explanation_text, user_question, state['topic_chat_messages'])
+                        st.write(answer)
+                        state['topic_chat_messages'].append({
+                            "role": "assistant",
+                            "content": answer
+                        })
+                    except Exception as e:
+                        error_msg = f"Извините, произошла ошибка при обработке вопроса: {e}"
+                        st.error(error_msg)
+                        state['topic_chat_messages'].append({
+                            "role": "assistant",
+                            "content": error_msg
+                        })
+            
             st.rerun()
+    
+    def _get_topic_chat_response(self, subject: str, section: str, topic: str, explanation_text: str, 
+                                  user_question: str, chat_history: list) -> str:
+        """Получить ответ от LLM на вопрос по теме"""
+        # Формируем системный промпт с контекстом темы
+        system_prompt = f"""Ты опытный учитель {subject.lower()}а. Сейчас обсуждается тема "{topic}" из раздела "{section}".
+
+Контекст темы:
+{explanation_text[:1000]}
+
+Твоя задача:
+1. Отвечать на вопросы ученика по этой теме
+2. Использовать простой и понятный язык
+3. Приводить примеры из контекста темы
+4. Если вопрос не относится к теме, вежливо напомни о теме обсуждения
+5. Отвечай кратко и по делу, без лишних раздумий
+
+ВАЖНО: Отвечай только на русском языке и только по теме. Не показывай процесс размышления, только финальный ответ."""
+        
+        # Формируем историю диалога
+        messages_text = system_prompt + "\n\n"
+        for msg in chat_history[-5:]:  # Берем последние 5 сообщений для контекста
+            if msg['role'] == 'user':
+                messages_text += f"Ученик: {msg['content']}\n"
+            elif msg['role'] == 'assistant':
+                messages_text += f"Учитель: {msg['content']}\n"
+        
+        messages_text += f"Ученик: {user_question}\nУчитель:"
+        
+        # Получаем ответ от LLM
+        try:
+            response = self.llm_provider.invoke(messages_text)
+            
+            # Очищаем ответ от раздумий (если они все же появились)
+            response = self._clean_reasoning_from_response(response)
+            
+            return response.strip()
+        except ConnectionError:
+            return "Извините, сервер LLM недоступен. Проверьте подключение."
+        except Exception as e:
+            return f"Извините, произошла ошибка: {e}"
+    
+    def _clean_reasoning_from_response(self, text: str) -> str:
+        """Очистить ответ от раздумий deepseek-r1"""
+        if not text:
+            return ""
+        
+        # Убираем маркеры раздумий
+        reasoning_markers = [
+            "<think>",
+            "</think>",
+            "<reasoning>",
+            "</reasoning>",
+            "```thinking",
+            "```reasoning"
+        ]
+        
+        cleaned = text
+        for marker in reasoning_markers:
+            cleaned = cleaned.replace(marker, "")
+        
+        # Убираем блоки между маркерами раздумий
+        import re
+        cleaned = re.sub(r'<think>.*?</think>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'<reasoning>.*?</reasoning>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'```thinking.*?```', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'```reasoning.*?```', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        
+        return cleaned.strip()
             
     @log_function_execution
     def get_topic_explanation(self, subject: str, section: str, topic: str, regenerate: bool = False) -> str:
@@ -621,7 +759,5 @@ class TheoryManager:
         model_name = self.llm_provider.model_name
         
 
-# Создание экземпляра менеджера теории
-# Используем Ollama провайдер с моделью deepseek-r1:7b
 # Для релиза с OpenAI: theory_manager = TheoryManager(llm_provider="openai", model_name="gpt-4o-mini", temperature=0.7)
-theory_manager = TheoryManager(llm_provider="ollama", model_name="deepseek-r1:7b", temperature=0.7)
+theory_manager = TheoryManager(llm_provider="ollama", model_name="deepseek-r1:7b")
