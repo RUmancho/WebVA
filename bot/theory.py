@@ -1,11 +1,9 @@
 import streamlit as st
-import socket
 import functools
 from typing import Optional, Callable
 from bot.settings import OPENAI_API_KEY
 from langchain_ollama import OllamaLLM
-import topics
-
+from bot import topics
 
 def log_function_execution(func: Callable) -> Callable:
     """Декоратор для логирования выполнения функций (успех/неудача)"""
@@ -46,48 +44,49 @@ class LLMProvider:
 class OllamaProvider(LLMProvider):
     """Провайдер для Ollama"""
     
-    def __init__(self, model_name: str = "deepseek-r1:7b", temperature: float = 0.7, **kwargs):
-        super().__init__(model_name, temperature=temperature, **kwargs)
+    def __init__(self, model_name: str = "deepseek-r1:7b", temperature: float = 0.0, **kwargs):
+        super().__init__(model_name, **kwargs)
         self.temperature = temperature
-    
-    @log_function_execution
-    def _check_server_available(self) -> bool:
-        """Проверка доступности Ollama сервера"""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            result = sock.connect_ex(('localhost', 11434))
-            sock.close()
-            return result == 0
-        except Exception:
-            return False
     
     def initialize(self) -> bool:
         """Инициализация Ollama клиента"""
-        if not self._check_server_available():
-                return False
-            
         try:
+            # Создаем словарь параметров, исключая temperature из kwargs если он там есть
+            ollama_kwargs = {k: v for k, v in self.kwargs.items() if k != 'temperature'}
+            ollama_kwargs['temperature'] = self.temperature
+            
             self.client = OllamaLLM(
                 model=self.model_name,
-                temperature=self.temperature,
-                **self.kwargs
+                **ollama_kwargs
             )
-            # Тестовый запрос для проверки доступности модели
-            test_response = self.client.invoke("test")
-            if test_response is not None:
-                return True
-            self.client = None
-            return False
-        except Exception:
+            print(f"Ollama клиент создан для модели {self.model_name}")
+            return True
+        except Exception as e:
+            print(f"Ошибка при создании Ollama клиента: {e}")
             self.client = None
             return False
     
     def invoke(self, prompt: str) -> str:
         """Выполнение запроса к Ollama"""
+        # Если клиент не создан, пробуем создать его
         if not self.client:
-            raise RuntimeError("Ollama клиент не инициализирован")
-        return self.client.invoke(prompt)
+            print(f"Попытка создать Ollama клиент для модели {self.model_name}")
+            if not self.initialize():
+                raise ConnectionError("Ollama клиент не инициализирован. Убедитесь, что Ollama установлен и запущен.")
+        
+        try:
+            print(f"Отправка запроса к Ollama (модель: {self.model_name})")
+            response = self.client.invoke(prompt)
+            print(f"Получен ответ от Ollama (длина: {len(response) if response else 0} символов)")
+            return response
+        except Exception as e:
+            error_str = str(e).lower()
+            print(f"Ошибка при вызове Ollama: {e}")
+            # Проверяем, является ли это ошибкой подключения
+            connection_keywords = ['connection', 'refused', 'unreachable', 'timeout', '10061', '10060', 'connect', 'failed', 'cannot connect']
+            if any(keyword in error_str for keyword in connection_keywords):
+                raise ConnectionError("Ollama сервер недоступен. Убедитесь, что сервер запущен: ollama serve")
+            raise
 
 
 class OpenAIProvider(LLMProvider):
@@ -184,7 +183,13 @@ class TheoryManager:
                 **llm_kwargs
             )
         
-        self.llm_provider.initialize()
+        # Инициализируем провайдер
+        initialized = self.llm_provider.initialize()
+        if initialized:
+            print(f"Провайдер {type(self.llm_provider).__name__} успешно инициализирован (модель: {self.llm_provider.model_name})")
+        else:
+            print(f"Провайдер {type(self.llm_provider).__name__} не инициализирован, будет создан при первом запросе")
+        
         self.init_theory_session()
     
     @log_function_execution
@@ -358,7 +363,7 @@ class TheoryManager:
         subject = state['selected_subject']
         section = state['selected_section']
         topic = state['selected_topic']
-        
+            
         if not all([subject, section, topic]):
             state['current_page'] = 'subjects'
             st.rerun()
@@ -470,11 +475,23 @@ class TheoryManager:
                 return local_explanation
         
         # Пробуем использовать основной провайдер
-        if self.llm_provider.is_available():
-            try:
-                return self._get_llm_explanation(subject, section, topic)
-            except Exception:
-                pass
+        # Всегда пробуем, даже если объект не создан (он создастся при вызове)
+        try:
+            print(f"Попытка получить объяснение от {type(self.llm_provider).__name__}")
+            return self._get_llm_explanation(subject, section, topic)
+        except ConnectionError as e:
+            # Ошибка подключения - сервер недоступен
+            print(f"Ошибка подключения к LLM: {e}")
+            pass
+        except (RuntimeError, ValueError) as e:
+            # Другие ошибки LLM
+            print(f"Ошибка при обращении к LLM: {e}")
+            pass
+        except Exception as e:
+            print(f"Неожиданная ошибка LLM: {e}")
+            import traceback
+            traceback.print_exc()
+            pass
         
         # Fallback на OpenAI, если основной провайдер - Ollama
         if isinstance(self.llm_provider, OllamaProvider) and self.api_key:
@@ -486,11 +503,11 @@ class TheoryManager:
                 pass
         
         # Пробуем локальное объяснение
-        local_explanation = self._get_local_explanation(subject, section, topic, generate_if_missing=True)
-        if local_explanation:
-            return local_explanation
-        
-        return self._get_error_message(subject, section, topic)
+            local_explanation = self._get_local_explanation(subject, section, topic, generate_if_missing=True)
+            if local_explanation:
+                return local_explanation
+            
+            return self._get_error_message(subject, section, topic)
     
     def _get_llm_explanation(self, subject: str, section: str, topic: str) -> str:
         """Получить объяснение от текущего LLM провайдера"""
@@ -522,19 +539,19 @@ class TheoryManager:
             raise ValueError("Пустой или слишком короткий ответ")
         
         # Проверяем на сообщения об ошибках
-        error_indicators = [
-            "К сожалению, не удалось сгенерировать",
-            "неудалось сгенерировать",
-            "Ollama сервер недоступен",
-            "ollama serve",
-            "ollama pull",
-            "Что можно сделать:",
+            error_indicators = [
+                "К сожалению, не удалось сгенерировать",
+                "неудалось сгенерировать",
+                "Ollama сервер недоступен",
+                "ollama serve",
+                "ollama pull",
+                "Что можно сделать:",
             "Убедитесь, что модель"
-        ]
+            ]
         
-        response_lower = response_text.lower()
-        if any(indicator.lower() in response_lower for indicator in error_indicators):
-            raise ValueError("Ответ содержит сообщение об ошибке")
+            response_lower = response_text.lower()
+            if any(indicator.lower() in response_lower for indicator in error_indicators):
+                raise ValueError("Ответ содержит сообщение об ошибке")
         
         if response_text.strip().startswith(("ollama", "Ollama")):
             raise ValueError("Ответ похож на команду")
@@ -598,94 +615,13 @@ class TheoryManager:
         if local_explanation:
             return self._clean_text_from_cursor(local_explanation)
         
-        ollama_available = isinstance(self.llm_provider, OllamaProvider) and self.llm_provider._check_server_available()
+        # Определяем тип провайдера и доступность
+        is_ollama = isinstance(self.llm_provider, OllamaProvider)
         has_openai_key = bool(self.api_key)
         model_name = self.llm_provider.model_name
         
-        if not ollama_available:
-            error_msg = f"""
-## {topic}
-
-**К сожалению, не удалось сгенерировать объяснение этой темы.**
-
-**Ollama сервер недоступен!**
-
-**Чтобы использовать локальную модель {model_name}, выполните следующие шаги:**
-
-1. **Убедитесь, что Ollama установлен:**
-   - Скачайте с https://ollama.ai
-   - Установите на ваш компьютер
-
-2. **Запустите Ollama сервер:**
-   - Откройте командную строку (терминал)
-   - Выполните команду: `ollama serve`
-   - Сервер должен запуститься на порту 11434
-
-3. **Загрузите модель {model_name}:**
-   - В другом окне терминала выполните: `ollama pull {model_name}`
-   - Дождитесь завершения загрузки
-
-4. **После этого обновите страницу** и попробуйте снова
-
-**Альтернативные варианты:**
-- Настройте API ключ OpenAI для использования облачной модели
-- Обратитесь к учителю за дополнительной информацией
-- Используйте учебники и онлайн-ресурсы
-
-**Предмет:** {subject}  
-**Раздел:** {section}  
-**Тема:** {topic}
-
-Эта тема важна для понимания дальнейшего материала. Рекомендуем изучить её более подробно.
-"""
-        else:
-            if has_openai_key:
-                error_msg = f"""## {topic}
-
-**К сожалению, не удалось сгенерировать объяснение этой темы.**
-
-**Ollama сервер доступен, но возникла ошибка при генерации. OpenAI также не смог сгенерировать объяснение.**
-
-**Что можно сделать:**
-
-1. Убедитесь, что модель {model_name} загружена: `ollama pull {model_name}`
-2. Проверьте, что модель доступна: `ollama list`
-3. Проверьте подключение к интернету (для OpenAI)
-4. Обратитесь к учителю за дополнительной информацией
-5. Используйте учебники и онлайн-ресурсы
-
-**Предмет:** {subject}  
-**Раздел:** {section}  
-**Тема:** {topic}
-
-Эта тема важна для понимания дальнейшего материала. Рекомендуем изучить её более подробно.
-"""
-            else:
-                error_msg = f"""## {topic}
-
-**К сожалению, не удалось сгенерировать объяснение этой темы.**
-
-**Ollama сервер доступен, но возникла ошибка при генерации.**
-
-**Что можно сделать:**
-
-1. Убедитесь, что модель {model_name} загружена: `ollama pull {model_name}`
-2. Проверьте, что модель доступна: `ollama list`
-3. Настройте API ключ OpenAI для использования облачной модели (рекомендуется)
-4. Обратитесь к учителю за дополнительной информацией
-5. Используйте учебники и онлайн-ресурсы
-
-**Предмет:** {subject}  
-**Раздел:** {section}  
-**Тема:** {topic}
-
-Эта тема важна для понимания дальнейшего материала. Рекомендуем изучить её более подробно.
-"""
-        
-        return self._clean_text_from_cursor(error_msg.strip())
-
 
 # Создание экземпляра менеджера теории
-# Для тестов: theory_manager = TheoryManager(llm_provider="ollama", model_name="deepseek-r1:7b", temperature=0.7)
-# Для релиза: theory_manager = TheoryManager(llm_provider="openai", model_name="gpt-4o-mini", temperature=0.7)
-theory_manager = TheoryManager()
+# Используем Ollama провайдер с моделью deepseek-r1:7b
+# Для релиза с OpenAI: theory_manager = TheoryManager(llm_provider="openai", model_name="gpt-4o-mini", temperature=0.7)
+theory_manager = TheoryManager(llm_provider="ollama", model_name="deepseek-r1:7b", temperature=0.7)
