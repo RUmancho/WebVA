@@ -301,8 +301,6 @@ class LLM:
         - Обрезаем до 3–4 строк максимум, чтобы избежать лишнего текста.
         """
         try:
-            if not isinstance(raw_text, str):
-                return "Не удалось сгенерировать задачу"
             lines = [ln.strip() for ln in raw_text.strip().splitlines()]
             drop_prefixes = (
                 "решение", "пример", "вид", "answer", "program", "программа", "ответ"

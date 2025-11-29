@@ -14,21 +14,17 @@ def load_prompt(filename: str) -> str:
 
 def load_prompt_with_format(filename: str, **kwargs) -> str:
     """Загружает промпт из файла и форматирует его с переданными параметрами."""
-    try:
-        prompt_template = load_prompt(filename)
-        if not prompt_template:
-            return ""
-        
-        # Если есть параметры и в шаблоне есть плейсхолдеры, форматируем
-        if kwargs and "{" in prompt_template and "}" in prompt_template:
-            try:
-                return prompt_template.format(**kwargs)
-            except KeyError as e:
-                print(f"Предупреждение: отсутствует параметр для промпта {filename}: {e}")
-                return prompt_template
-        
-        return prompt_template
-    except Exception as e:
-        print(f"Ошибка форматирования промпта {filename}: {e}")
+    prompt_template = load_prompt(filename)
+    if not prompt_template:
         return ""
+    
+    # Если есть параметры и в шаблоне есть плейсхолдеры, форматируем
+    if kwargs and "{" in prompt_template and "}" in prompt_template:
+        try:
+            return prompt_template.format(**kwargs)
+        except KeyError as e:
+            print(f"Предупреждение: отсутствует параметр для промпта {filename}: {e}")
+            return prompt_template
+    
+    return prompt_template
 
