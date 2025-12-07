@@ -129,6 +129,66 @@ class Database:
         finally:
             session.close()
     
+    def get_user_by_email(self, email):
+        """Получение пользователя по email"""
+        session = self.get_session()
+        try:
+            email = email.strip().lower() if email else ''
+            if not email:
+                return None
+            
+            all_users = session.query(User).all()
+            for u in all_users:
+                user_email_normalized = u.email.strip().lower() if u.email else ''
+                if user_email_normalized == email:
+                    return {
+                        'id': u.id,
+                        'email': u.email,
+                        'first_name': u.first_name,
+                        'last_name': u.last_name,
+                        'role': u.role
+                    }
+            return None
+        except Exception as e:
+            print(f"Ошибка получения пользователя по email: {e}")
+            return None
+        finally:
+            session.close()
+    
+    def reset_user_password(self, email, new_password):
+        """Сброс пароля пользователя"""
+        session = self.get_session()
+        try:
+            email = email.strip().lower() if email else ''
+            if not email:
+                return False, "Email не может быть пустым"
+            
+            all_users = session.query(User).all()
+            user = None
+            for u in all_users:
+                user_email_normalized = u.email.strip().lower() if u.email else ''
+                if user_email_normalized == email:
+                    user = u
+                    break
+            
+            if not user:
+                return False, "Пользователь с таким email не найден"
+            
+            # Хеширование нового пароля
+            password_hash = self.hash_password(new_password)
+            user.password_hash = password_hash
+            session.commit()
+            
+            print(f"Пароль успешно сброшен для пользователя {email}")
+            return True, "Пароль успешно изменен"
+            
+        except Exception as e:
+            session.rollback()
+            print(f"Ошибка сброса пароля: {e}")
+            return False, f"Ошибка: {e}"
+        finally:
+            session.close()
+    
     def authenticate_user(self, email, password):
         """Аутентификация пользователя"""
         session = self.get_session()

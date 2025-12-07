@@ -1,0 +1,94 @@
+<div class="card">
+    <div class="card-body">
+        <h2 class="card-title">📊 Главная панель</h2>
+        
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title">Ваша роль</h5>
+                        <h3 class="text-primary">{{ user.role }}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title">Учителей в системе</h5>
+                        <h3 class="text-info">{{ teachers_count if teachers_count else 'Загрузка...' }}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title">Статус</h5>
+                        <h3 class="text-success">Активен</h3>
+                        <small class="text-muted">Онлайн</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <hr>
+        
+        {% if user.role == 'Ученик' %}
+            <h3>👨‍🎓 Информация об ученике</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="alert alert-info">
+                        <strong>Школа:</strong> {{ user.school or 'Не указана' }}
+                    </div>
+                    <div class="alert alert-info">
+                        <strong>Класс:</strong> {{ user.class_number or 'Не указан' }}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="alert alert-info">
+                        <strong>Город:</strong> {{ user.city or 'Не указан' }}
+                    </div>
+                </div>
+            </div>
+            
+            <h4>📚 Возможности:</h4>
+            <ul>
+                <li>Просмотр и связь с учителями</li>
+                <li>Принятие заявок от учителей</li>
+                <li>Изучение теоретических материалов</li>
+                <li>Прохождение тестов по предметам</li>
+                <li>Участие в видеозвонках на встроенной платформе</li>
+                <li>Скачивание записей уроков (доступны 2 дня)</li>
+                <li>Общение с чат-ботом поддержки</li>
+            </ul>
+        {% elif user.role == 'Учитель' %}
+            <h3>👨‍🏫 Информация об учителе</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="alert alert-info">
+                        <strong>Школа:</strong> {{ user.school or 'Не указана' }}
+                    </div>
+                    <div class="alert alert-info">
+                        <strong>Город:</strong> {{ user.city or 'Не указан' }}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="alert alert-info">
+                        <strong>Предметы:</strong> {{ user.subjects or 'Не указаны' }}
+                    </div>
+                </div>
+            </div>
+            
+            <h4>🎯 Возможности:</h4>
+            <ul>
+                <li>Отправка заявок ученикам</li>
+                <li>Планирование видеозвонков на встроенной платформе</li>
+                <li>Автоматическая запись уроков</li>
+                <li>Создание ручных записей уроков</li>
+                <li>Изучение теоретических материалов</li>
+                <li>Создание и прохождение тестов</li>
+                <li>Общение с чат-ботом поддержки</li>
+            </ul>
+        {% endif %}
+    </div>
+</div>
+

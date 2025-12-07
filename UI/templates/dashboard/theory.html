@@ -1,0 +1,347 @@
+<div class="card">
+    <div class="card-body">
+        <h2 class="card-title">📚 Теоретические материалы</h2>
+        
+        <div id="theory-loading" class="text-center" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+        </div>
+        
+        <div id="theory-error" class="alert alert-danger" style="display: none;"></div>
+        
+        <!-- Навигация (хлебные крошки) -->
+        <nav id="theory-breadcrumbs" aria-label="breadcrumb" style="display: none;">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="#" onclick="theoryNavigate('subjects'); return false;">Предметы</a></li>
+            </ol>
+        </nav>
+        
+        <!-- Контент -->
+        <div id="theory-content">
+            <div id="theory-subjects" class="theory-page">
+                <h4>Выберите предмет:</h4>
+                <div class="row" id="subjects-list"></div>
+            </div>
+            
+            <div id="theory-sections" class="theory-page" style="display: none;">
+                <h4 id="sections-title"></h4>
+                <div class="list-group" id="sections-list"></div>
+            </div>
+            
+            <div id="theory-topics" class="theory-page" style="display: none;">
+                <h4 id="topics-title"></h4>
+                <div class="list-group" id="topics-list"></div>
+            </div>
+            
+            <div id="theory-explanation" class="theory-page" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 id="explanation-title"></h4>
+                    <button class="btn btn-sm btn-outline-primary" onclick="regenerateExplanation()">
+                        🔄 Получить другое объяснение
+                    </button>
+                </div>
+                <div id="explanation-content" class="card">
+                    <div class="card-body">
+                        <div id="explanation-loading" class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Генерация объяснения...</span>
+                            </div>
+                            <p class="mt-2">Генерирую объяснение с помощью deepseek-r1:7b...</p>
+                        </div>
+                        <div id="explanation-text" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let theoryState = {
+    currentPage: 'subjects',
+    selectedSubject: null,
+    selectedSection: null,
+    selectedTopic: null
+};
+
+// Загрузка состояния при открытии вкладки
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('theory-content')) {
+        loadTheoryState();
+    }
+});
+
+function loadTheoryState() {
+    fetch('/api/theory/state')
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showTheoryError(data.error);
+                return;
+            }
+            
+            theoryState = {
+                currentPage: data.current_page || 'subjects',
+                selectedSubject: data.selected_subject,
+                selectedSection: data.selected_section,
+                selectedTopic: data.selected_topic
+            };
+            
+            if (data.subjects) {
+                displaySubjects(data.subjects);
+            }
+            
+            if (theoryState.currentPage === 'sections' && theoryState.selectedSubject) {
+                loadSections(theoryState.selectedSubject);
+            } else if (theoryState.currentPage === 'topics' && theoryState.selectedSubject && theoryState.selectedSection) {
+                loadTopics(theoryState.selectedSubject, theoryState.selectedSection);
+            } else if (theoryState.currentPage === 'explanation' && theoryState.selectedSubject && theoryState.selectedSection && theoryState.selectedTopic) {
+                loadExplanation(theoryState.selectedSubject, theoryState.selectedSection, theoryState.selectedTopic);
+            }
+        })
+        .catch(err => {
+            console.error('Ошибка загрузки состояния:', err);
+            loadSubjects();
+        });
+}
+
+function loadSubjects() {
+    showLoading(true);
+    fetch('/api/theory/subjects')
+        .then(r => r.json())
+        .then(data => {
+            showLoading(false);
+            if (data.error) {
+                showTheoryError(data.error);
+                return;
+            }
+            displaySubjects(data.subjects_structure || {});
+        })
+        .catch(err => {
+            showLoading(false);
+            showTheoryError('Ошибка загрузки предметов: ' + err);
+        });
+}
+
+function displaySubjects(subjects) {
+    const container = document.getElementById('subjects-list');
+    container.innerHTML = '';
+    
+    const subjectsList = Object.keys(subjects);
+    subjectsList.forEach(subject => {
+        const subjectData = subjects[subject];
+        const col = document.createElement('div');
+        col.className = 'col-md-4 mb-3';
+        col.innerHTML = `
+            <button class="btn btn-outline-primary w-100 p-3" onclick="selectSubject('${subject}')">
+                <h5>${subjectData.icon || '📚'} ${subject}</h5>
+            </button>
+        `;
+        container.appendChild(col);
+    });
+    
+    showPage('subjects');
+    updateBreadcrumbs(['Предметы']);
+}
+
+function selectSubject(subject) {
+    theoryState.selectedSubject = subject;
+    theoryState.currentPage = 'sections';
+    loadSections(subject);
+}
+
+function loadSections(subject) {
+    showLoading(true);
+    fetch(`/api/theory/sections?subject=${encodeURIComponent(subject)}`)
+        .then(r => r.json())
+        .then(data => {
+            showLoading(false);
+            if (data.error) {
+                showTheoryError(data.error);
+                return;
+            }
+            displaySections(subject, data.sections || {});
+        })
+        .catch(err => {
+            showLoading(false);
+            showTheoryError('Ошибка загрузки разделов: ' + err);
+        });
+}
+
+function displaySections(subject, sections) {
+    const title = document.getElementById('sections-title');
+    const list = document.getElementById('sections-list');
+    
+    title.textContent = `📚 ${subject} - Выберите раздел:`;
+    list.innerHTML = '';
+    
+    Object.keys(sections).forEach(section => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action';
+        item.innerHTML = `📖 ${section}`;
+        item.onclick = (e) => {
+            e.preventDefault();
+            selectSection(subject, section);
+        };
+        list.appendChild(item);
+    });
+    
+    showPage('sections');
+    updateBreadcrumbs(['Предметы', subject]);
+}
+
+function selectSection(subject, section) {
+    theoryState.selectedSection = section;
+    theoryState.currentPage = 'topics';
+    loadTopics(subject, section);
+}
+
+function loadTopics(subject, section) {
+    showLoading(true);
+    fetch(`/api/theory/topics?subject=${encodeURIComponent(subject)}&section=${encodeURIComponent(section)}`)
+        .then(r => r.json())
+        .then(data => {
+            showLoading(false);
+            if (data.error) {
+                showTheoryError(data.error);
+                return;
+            }
+            displayTopics(subject, section, data.topics || []);
+        })
+        .catch(err => {
+            showLoading(false);
+            showTheoryError('Ошибка загрузки тем: ' + err);
+        });
+}
+
+function displayTopics(subject, section, topics) {
+    const title = document.getElementById('topics-title');
+    const list = document.getElementById('topics-list');
+    
+    title.textContent = `📚 ${subject} → ${section} - Выберите тему:`;
+    list.innerHTML = '';
+    
+    topics.forEach(topic => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action';
+        item.innerHTML = `🎯 ${topic}`;
+        item.onclick = (e) => {
+            e.preventDefault();
+            selectTopic(subject, section, topic);
+        };
+        list.appendChild(item);
+    });
+    
+    showPage('topics');
+    updateBreadcrumbs(['Предметы', subject, section]);
+}
+
+function selectTopic(subject, section, topic) {
+    theoryState.selectedTopic = topic;
+    theoryState.currentPage = 'explanation';
+    loadExplanation(subject, section, topic);
+}
+
+function loadExplanation(subject, section, topic, regenerate = false) {
+    const title = document.getElementById('explanation-title');
+    const loading = document.getElementById('explanation-loading');
+    const text = document.getElementById('explanation-text');
+    
+    title.textContent = `📚 ${subject} → ${section} → ${topic}`;
+    loading.style.display = 'block';
+    text.style.display = 'none';
+    
+    showPage('explanation');
+    updateBreadcrumbs(['Предметы', subject, section, topic]);
+    
+    fetch('/api/theory/explanation', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({subject, section, topic, regenerate})
+    })
+    .then(r => r.json())
+    .then(data => {
+        loading.style.display = 'none';
+        if (data.error) {
+            showTheoryError(data.error);
+            return;
+        }
+        
+        text.innerHTML = data.explanation || 'Объяснение не сгенерировано';
+        text.style.display = 'block';
+    })
+    .catch(err => {
+        loading.style.display = 'none';
+        showTheoryError('Ошибка генерации объяснения: ' + err);
+    });
+}
+
+function regenerateExplanation() {
+    if (theoryState.selectedSubject && theoryState.selectedSection && theoryState.selectedTopic) {
+        loadExplanation(theoryState.selectedSubject, theoryState.selectedSection, theoryState.selectedTopic, true);
+    }
+}
+
+function theoryNavigate(page) {
+    if (page === 'subjects') {
+        theoryState = {currentPage: 'subjects', selectedSubject: null, selectedSection: null, selectedTopic: null};
+        loadSubjects();
+    } else if (page === 'sections' && theoryState.selectedSubject) {
+        theoryState.currentPage = 'sections';
+        loadSections(theoryState.selectedSubject);
+    } else if (page === 'topics' && theoryState.selectedSubject && theoryState.selectedSection) {
+        theoryState.currentPage = 'topics';
+        loadTopics(theoryState.selectedSubject, theoryState.selectedSection);
+    }
+}
+
+function showPage(page) {
+    document.querySelectorAll('.theory-page').forEach(p => p.style.display = 'none');
+    document.getElementById(`theory-${page}`).style.display = 'block';
+    theoryState.currentPage = page;
+}
+
+function updateBreadcrumbs(items) {
+    const breadcrumbs = document.getElementById('theory-breadcrumbs');
+    const ol = breadcrumbs.querySelector('ol');
+    ol.innerHTML = '';
+    
+    items.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.className = 'breadcrumb-item' + (index === items.length - 1 ? ' active' : '');
+        if (index < items.length - 1) {
+            const a = document.createElement('a');
+            a.href = '#';
+            a.textContent = item;
+            a.onclick = (e) => {
+                e.preventDefault();
+                if (index === 0) theoryNavigate('subjects');
+                else if (index === 1) theoryNavigate('sections');
+                else if (index === 2) theoryNavigate('topics');
+            };
+            li.appendChild(a);
+        } else {
+            li.textContent = item;
+        }
+        ol.appendChild(li);
+    });
+    
+    breadcrumbs.style.display = items.length > 1 ? 'block' : 'none';
+}
+
+function showLoading(show) {
+    document.getElementById('theory-loading').style.display = show ? 'block' : 'none';
+}
+
+function showTheoryError(message) {
+    const errorDiv = document.getElementById('theory-error');
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+    setTimeout(() => {
+        errorDiv.style.display = 'none';
+    }, 5000);
+}
+</script>

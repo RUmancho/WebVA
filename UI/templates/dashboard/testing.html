@@ -1,0 +1,541 @@
+<div class="card">
+    <div class="card-body">
+        <h2 class="card-title">📝 Система тестирования</h2>
+        
+        <div id="testing-loading" class="text-center" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+        </div>
+        
+        <div id="testing-error" class="alert alert-danger" style="display: none;"></div>
+        
+        <!-- Навигация -->
+        <nav id="testing-breadcrumbs" aria-label="breadcrumb" style="display: none;">
+            <ol class="breadcrumb"></ol>
+        </nav>
+        
+        <!-- Контент -->
+        <div id="testing-content">
+            <!-- Выбор предмета -->
+            <div id="testing-subjects" class="testing-page">
+                <h4>Выберите предмет для тестирования:</h4>
+                <div class="alert alert-success">
+                    🎓 Добро пожаловать в систему тестирования! Выберите предмет и проверьте свои знания!
+                </div>
+                <div class="row" id="subjects-list"></div>
+            </div>
+            
+            <!-- Выбор раздела -->
+            <div id="testing-sections" class="testing-page" style="display: none;">
+                <h4 id="sections-title"></h4>
+                <div class="list-group" id="sections-list"></div>
+            </div>
+            
+            <!-- Выбор темы -->
+            <div id="testing-topics" class="testing-page" style="display: none;">
+                <h4 id="topics-title"></h4>
+                <div class="list-group" id="topics-list"></div>
+            </div>
+            
+            <!-- Выбор сложности -->
+            <div id="testing-difficulty" class="testing-page" style="display: none;">
+                <h4 id="difficulty-title"></h4>
+                <div class="alert alert-info">
+                    💡 Совет: Начните с лёгкого уровня, если изучаете тему впервые!
+                </div>
+                <div id="difficulty-list"></div>
+            </div>
+            
+            <!-- Тест -->
+            <div id="testing-test" class="testing-page" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 id="test-title"></h4>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="regenerateTest()">🔄 Новый тест</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="testingNavigate('topics')">🎯 Другая тема</button>
+                    </div>
+                </div>
+                <div class="progress mb-3">
+                    <div id="test-progress" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                </div>
+                <div id="test-questions"></div>
+                <div class="mt-3">
+                    <button id="finish-test-btn" class="btn btn-success" onclick="finishTest()" style="display: none;">
+                        ✅ Завершить тест и узнать результат
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Результаты -->
+            <div id="testing-results" class="testing-page" style="display: none;">
+                <h4 id="results-title"></h4>
+                <div id="results-content"></div>
+                <div class="mt-3">
+                    <button class="btn btn-primary" onclick="testingNavigate('subjects')">🔄 Новый тест</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let testingState = {
+    currentPage: 'subjects',
+    selectedSubject: null,
+    selectedSection: null,
+    selectedTopic: null,
+    selectedDifficulty: null,
+    currentTest: null,
+    userAnswers: {}
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('testing-content')) {
+        loadTestingState();
+    }
+});
+
+function loadTestingState() {
+    fetch('/api/testing/state')
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showTestingError(data.error);
+                return;
+            }
+            
+            testingState.currentPage = data.current_page || 'subjects';
+            testingState.selectedSubject = data.selected_subject;
+            testingState.selectedSection = data.selected_section;
+            testingState.selectedTopic = data.selected_topic;
+            testingState.selectedDifficulty = data.selected_difficulty;
+            
+            if (data.subjects) {
+                displaySubjects(data.subjects);
+            }
+        })
+        .catch(err => {
+            console.error('Ошибка загрузки состояния:', err);
+            loadSubjects();
+        });
+}
+
+function loadSubjects() {
+    showLoading(true);
+    fetch('/api/testing/subjects')
+        .then(r => r.json())
+        .then(data => {
+            showLoading(false);
+            if (data.error) {
+                showTestingError(data.error);
+                return;
+            }
+            displaySubjects(data.subjects_structure || {});
+        })
+        .catch(err => {
+            showLoading(false);
+            showTestingError('Ошибка загрузки предметов: ' + err);
+        });
+}
+
+function displaySubjects(subjects) {
+    const container = document.getElementById('subjects-list');
+    container.innerHTML = '';
+    
+    Object.keys(subjects).forEach(subject => {
+        const subjectData = subjects[subject];
+        const col = document.createElement('div');
+        col.className = 'col-md-4 mb-3';
+        col.innerHTML = `
+            <button class="btn btn-outline-primary w-100 p-3" onclick="selectSubject('${subject}')">
+                <h5>${subjectData.icon || '📚'} ${subject}</h5>
+            </button>
+        `;
+        container.appendChild(col);
+    });
+    
+    showPage('subjects');
+    updateBreadcrumbs(['Предметы']);
+}
+
+function selectSubject(subject) {
+    fetch('/api/testing/select-subject', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({subject})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showTestingError(data.error);
+            return;
+        }
+        testingState.selectedSubject = subject;
+        displaySections(subject, data.sections || {});
+    })
+    .catch(err => showTestingError('Ошибка: ' + err));
+}
+
+function displaySections(subject, sections) {
+    const title = document.getElementById('sections-title');
+    const list = document.getElementById('sections-list');
+    
+    title.textContent = `${subject} - Выберите раздел:`;
+    list.innerHTML = '';
+    
+    Object.keys(sections).forEach(section => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action';
+        item.innerHTML = `📖 ${section}`;
+        item.onclick = (e) => {
+            e.preventDefault();
+            selectSection(section);
+        };
+        list.appendChild(item);
+    });
+    
+    showPage('sections');
+    updateBreadcrumbs(['Предметы', subject]);
+}
+
+function selectSection(section) {
+    fetch('/api/testing/select-section', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({section})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showTestingError(data.error);
+            return;
+        }
+        testingState.selectedSection = section;
+        displayTopics(data.topics || []);
+    })
+    .catch(err => showTestingError('Ошибка: ' + err));
+}
+
+function displayTopics(topics) {
+    const title = document.getElementById('topics-title');
+    const list = document.getElementById('topics-list');
+    
+    title.textContent = `${testingState.selectedSubject} → ${testingState.selectedSection} - Выберите тему:`;
+    list.innerHTML = '';
+    
+    topics.forEach(topic => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action';
+        item.innerHTML = `🎯 ${topic}`;
+        item.onclick = (e) => {
+            e.preventDefault();
+            selectTopic(topic);
+        };
+        list.appendChild(item);
+    });
+    
+    showPage('topics');
+    updateBreadcrumbs(['Предметы', testingState.selectedSubject, testingState.selectedSection]);
+}
+
+function selectTopic(topic) {
+    fetch('/api/testing/select-topic', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({topic})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showTestingError(data.error);
+            return;
+        }
+        testingState.selectedTopic = topic;
+        displayDifficultyLevels(data.difficulty_levels || {});
+    })
+    .catch(err => showTestingError('Ошибка: ' + err));
+}
+
+function displayDifficultyLevels(levels) {
+    const title = document.getElementById('difficulty-title');
+    const container = document.getElementById('difficulty-list');
+    
+    title.textContent = `${testingState.selectedSubject} → ${testingState.selectedSection} → ${testingState.selectedTopic}`;
+    container.innerHTML = '';
+    
+    Object.keys(levels).forEach(difficulty => {
+        const level = levels[difficulty];
+        const card = document.createElement('div');
+        card.className = 'card mb-3';
+        card.innerHTML = `
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-2">
+                        <button class="btn btn-primary w-100" onclick="selectDifficulty('${difficulty}')">
+                            ${level.icon || '🟢'} ${difficulty}
+                        </button>
+                    </div>
+                    <div class="col-md-10">
+                        <strong>${difficulty}:</strong> ${level.description || ''}
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+    
+    showPage('difficulty');
+    updateBreadcrumbs(['Предметы', testingState.selectedSubject, testingState.selectedSection, testingState.selectedTopic]);
+}
+
+function selectDifficulty(difficulty) {
+    testingState.selectedDifficulty = difficulty;
+    generateTest();
+}
+
+function generateTest() {
+    showLoading(true);
+    fetch('/api/testing/generate-test', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            subject: testingState.selectedSubject,
+            section: testingState.selectedSection,
+            topic: testingState.selectedTopic,
+            difficulty: testingState.selectedDifficulty
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        showLoading(false);
+        if (data.error) {
+            showTestingError(data.error);
+            return;
+        }
+        testingState.currentTest = data.test;
+        testingState.userAnswers = {};
+        displayTest(data.test);
+    })
+    .catch(err => {
+        showLoading(false);
+        showTestingError('Ошибка генерации теста: ' + err);
+    });
+}
+
+function displayTest(test) {
+    const title = document.getElementById('test-title');
+    const questionsDiv = document.getElementById('test-questions');
+    
+    title.textContent = `Тест: ${testingState.selectedTopic} (${testingState.selectedDifficulty})`;
+    questionsDiv.innerHTML = '';
+    
+    test.questions.forEach((question, index) => {
+        const card = document.createElement('div');
+        card.className = 'card mb-3';
+        card.innerHTML = `
+            <div class="card-body">
+                <h5>Вопрос ${index + 1}: ${question.question}</h5>
+                <div class="form-check" id="question-${index}">
+                    ${question.options.map((opt, optIndex) => `
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" 
+                                   name="question_${index}" id="q${index}_opt${optIndex}" 
+                                   value="${opt}" onchange="saveAnswer(${index}, '${opt.replace(/'/g, "\\'")}')">
+                            <label class="form-check-label" for="q${index}_opt${optIndex}">
+                                ${opt}
+                            </label>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        questionsDiv.appendChild(card);
+    });
+    
+    showPage('test');
+    updateProgress();
+}
+
+function saveAnswer(questionIndex, answer) {
+    testingState.userAnswers[questionIndex] = answer;
+    updateProgress();
+    
+    fetch('/api/testing/submit-answer', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({question_index: questionIndex, answer})
+    }).catch(err => console.error('Ошибка сохранения ответа:', err));
+}
+
+function updateProgress() {
+    if (!testingState.currentTest) return;
+    
+    const total = testingState.currentTest.questions.length;
+    const answered = Object.keys(testingState.userAnswers).length;
+    const progress = (answered / total) * 100;
+    
+    document.getElementById('test-progress').style.width = progress + '%';
+    document.getElementById('test-progress').textContent = `${answered}/${total}`;
+    
+    const finishBtn = document.getElementById('finish-test-btn');
+    finishBtn.style.display = (answered === total) ? 'block' : 'none';
+}
+
+function finishTest() {
+    fetch('/api/testing/finish-test', {method: 'POST'})
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showTestingError(data.error);
+                return;
+            }
+            displayResults(data.results);
+        })
+        .catch(err => showTestingError('Ошибка: ' + err));
+}
+
+function displayResults(results) {
+    const title = document.getElementById('results-title');
+    const content = document.getElementById('results-content');
+    
+    title.textContent = `Результаты тестирования: ${testingState.selectedTopic}`;
+    
+    const correct = results.correct_count || 0;
+    const total = results.total_count || 0;
+    const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
+    
+    content.innerHTML = `
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3>${correct}/${total}</h3>
+                        <p>Правильных ответов</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3>${percentage}%</h3>
+                        <p>Процент выполнения</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3>${results.grade || 'N/A'}</h3>
+                        <p>Оценка</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <h5>Разбор вопросов:</h5>
+        <div id="results-details"></div>
+    `;
+    
+    const details = document.getElementById('results-details');
+    if (results.details) {
+        results.details.forEach((detail, index) => {
+            const card = document.createElement('div');
+            card.className = 'card mb-2';
+            const isCorrect = detail.is_correct;
+            card.innerHTML = `
+                <div class="card-body">
+                    <h6>Вопрос ${index + 1}: ${detail.question}</h6>
+                    <p><strong>Ваш ответ:</strong> ${detail.user_answer}</p>
+                    <p><strong>Правильный ответ:</strong> ${detail.correct_answer}</p>
+                    <p class="text-${isCorrect ? 'success' : 'danger'}">
+                        ${isCorrect ? '✅ Правильно' : '❌ Неправильно'}
+                    </p>
+                </div>
+            `;
+            details.appendChild(card);
+        });
+    }
+    
+    showPage('results');
+}
+
+function regenerateTest() {
+    generateTest();
+}
+
+function testingNavigate(page) {
+    if (page === 'subjects') {
+        testingState = {currentPage: 'subjects', selectedSubject: null, selectedSection: null, selectedTopic: null, selectedDifficulty: null};
+        loadSubjects();
+    } else if (page === 'sections' && testingState.selectedSubject) {
+        testingState.currentPage = 'sections';
+        fetch('/api/testing/select-subject', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({subject: testingState.selectedSubject})
+        })
+        .then(r => r.json())
+        .then(data => displaySections(testingState.selectedSubject, data.sections || {}))
+        .catch(err => showTestingError('Ошибка: ' + err));
+    } else if (page === 'topics' && testingState.selectedSubject && testingState.selectedSection) {
+        testingState.currentPage = 'topics';
+        fetch('/api/testing/select-section', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({section: testingState.selectedSection})
+        })
+        .then(r => r.json())
+        .then(data => displayTopics(data.topics || []))
+        .catch(err => showTestingError('Ошибка: ' + err));
+    }
+}
+
+function showPage(page) {
+    document.querySelectorAll('.testing-page').forEach(p => p.style.display = 'none');
+    document.getElementById(`testing-${page}`).style.display = 'block';
+    testingState.currentPage = page;
+}
+
+function updateBreadcrumbs(items) {
+    const breadcrumbs = document.getElementById('testing-breadcrumbs');
+    const ol = breadcrumbs.querySelector('ol');
+    ol.innerHTML = '';
+    
+    items.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.className = 'breadcrumb-item' + (index === items.length - 1 ? ' active' : '');
+        if (index < items.length - 1) {
+            const a = document.createElement('a');
+            a.href = '#';
+            a.textContent = item;
+            a.onclick = (e) => {
+                e.preventDefault();
+                if (index === 0) testingNavigate('subjects');
+                else if (index === 1) testingNavigate('sections');
+                else if (index === 2) testingNavigate('topics');
+            };
+            li.appendChild(a);
+        } else {
+            li.textContent = item;
+        }
+        ol.appendChild(li);
+    });
+    
+    breadcrumbs.style.display = items.length > 1 ? 'block' : 'none';
+}
+
+function showLoading(show) {
+    document.getElementById('testing-loading').style.display = show ? 'block' : 'none';
+}
+
+function showTestingError(message) {
+    const errorDiv = document.getElementById('testing-error');
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+    setTimeout(() => {
+        errorDiv.style.display = 'none';
+    }, 5000);
+}
+</script>

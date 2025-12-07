@@ -1,4 +1,4 @@
-import streamlit as st
+from flask import session as flask_session
 import math
 import sys
 from pathlib import Path
@@ -100,77 +100,72 @@ class FormulaManager:
             if field_id != target:  # Не проверяем целевую переменную
                 self._validate_divisor(field_id, value)
     
+    def init_formula_state(self):
+        """Инициализация состояния формул"""
+        session = flask_session
+        if 'formula_state' not in session:
+            session['formula_state'] = {
+                'current_category': None,
+                'current_subcategory': None
+            }
+    
     def show_formula_interface(self):
-        """Отображение интерфейса калькулятора формул"""
+        """Интерфейс формул - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
+        # TODO: UI теперь в Flask шаблонах (templates/dashboard/formulas.html)
+        # Этот метод возвращает данные для шаблона вместо отображения UI
         try:
-            st.header("📐 Калькулятор Формул")
-            st.info("💡 Выберите категорию и формулу для вычисления. Калькулятор автоматически найдет неизвестную величину!")
-            
             # Инициализация состояния
-            if 'formula_state' not in st.session_state:
-                st.session_state.formula_state = {
-                    'current_category': None,
-                    'current_subcategory': None
-                }
+            self.init_formula_state()
+            session = flask_session
             
-            # Выбор категории
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("📐 МАТЕМАТИКА", use_container_width=True):
-                    st.session_state.formula_state['current_category'] = "📐 МАТЕМАТИКА"
-                    st.session_state.formula_state['current_subcategory'] = None
-                    st.rerun()
-            
-            with col2:
-                if st.button("⚡ ФИЗИКА", use_container_width=True):
-                    st.session_state.formula_state['current_category'] = "⚡ ФИЗИКА"
-                    st.session_state.formula_state['current_subcategory'] = None
-                    st.rerun()
-            
-            # Если выбрана категория, показываем подкатегории
-            if st.session_state.formula_state['current_category']:
-                self.show_subcategories()
+            # Возвращаем данные для Flask шаблона
+            return {
+                'categories': self.categories,
+                'current_category': session.get('formula_state', {}).get('current_category'),
+                'current_subcategory': session.get('formula_state', {}).get('current_subcategory')
+            }
             
         except Exception as e:
-            st.error(f"Ошибка интерфейса формул: {e}")
             print(f"Ошибка интерфейса формул: {e}")
+            return {'error': str(e)}
     
     def show_subcategories(self):
-        """Показать подкатегории и формулы"""
+        """Показать подкатегории и формулы - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
+        # TODO: Этот метод использует Streamlit UI и требует адаптации
         try:
-            category = st.session_state.formula_state['current_category']
+            session = flask_session
+            category = session.get('formula_state', {}).get('current_category', '')
             
-            st.markdown("---")
-            st.subheader(f"{category}")
+            if not category or category not in self.categories:
+                return {'error': 'Категория не выбрана'}
             
-            # Выбор подкатегории
+            # Возвращаем данные для Flask шаблона
             subcategories = self.categories[category]['subcategories']
-            selected_subcategory = st.selectbox(
-                "Выберите раздел:",
-                subcategories,
-                key="subcategory_selector"
-            )
+            current_subcategory = session.get('formula_state', {}).get('current_subcategory')
             
-            st.session_state.formula_state['current_subcategory'] = selected_subcategory
+            # Получаем формулы для текущей подкатегории
+            formulas = []
+            if current_subcategory:
+                formulas_list = self.get_formulas(category, current_subcategory)
+                if formulas_list:
+                    # Преобразуем в список если это словарь
+                    if isinstance(formulas_list, list):
+                        formulas = formulas_list
+                    elif isinstance(formulas_list, dict):
+                        formulas = list(formulas_list.values())
+                    else:
+                        formulas = formulas_list if formulas_list else []
             
-            # Показываем формулы выбранной подкатегории
-            if selected_subcategory:
-                formulas = self.get_formulas(category, selected_subcategory)
-                
-                if formulas:
-                    st.markdown("---")
-                    st.subheader(f"Формулы раздела: {selected_subcategory}")
-                    
-                    for formula_data in formulas:
-                        self.render_formula_calculator(formula_data, category, selected_subcategory)
-                        st.markdown("---")
-                else:
-                    st.info("Формулы для этой подкатегории пока не добавлены.")
+            return {
+                'category': category,
+                'subcategories': subcategories,
+                'current_subcategory': current_subcategory,
+                'formulas': formulas
+            }
             
         except Exception as e:
-            st.error(f"Ошибка отображения подкатегорий: {e}")
             print(f"Ошибка отображения подкатегорий: {e}")
+            return {'error': str(e)}
     
     def get_formulas(self, category: str, subcategory: str) -> List[Dict]:
         """Возвращает список формул для категории и подкатегории"""
@@ -233,106 +228,29 @@ class FormulaManager:
         return formulas
     
     def render_formula_calculator(self, formula_data: Dict, category: str, subcategory: str):
-        """Отображает калькулятор для конкретной формулы"""
+        """Отображает калькулятор для конкретной формулы - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
+        # TODO: Этот метод использует Streamlit UI и требует полной адаптации для Flask
+        # UI теперь находится в Flask шаблонах (templates/dashboard/formulas.html)
+        # Метод можно удалить или адаптировать для возврата данных вместо отображения UI
         try:
-            with st.expander(f"🧮 {formula_data['name']} - {formula_data['formula']}", expanded=False):
-                # Выбор целевой переменной
-                st.markdown("**Что нужно найти:**")
-                target_options = []
-                for field_id, field_name, unit in formula_data['fields']:
-                    label = f"{field_name}" + (f" [{unit}]" if unit else "")
-                    target_options.append((field_id, label))
-                
-                target_field = st.radio(
-                    "Выберите неизвестную величину:",
-                    options=[opt[0] for opt in target_options],
-                    format_func=lambda x: dict(target_options)[x],
-                    horizontal=True,
-                    key=f"target_{formula_data['name']}_{category}_{subcategory}"
-                )
-                
-                st.markdown("**Введите известные значения:**")
-                
-                # Поля ввода
-                values = {}
-                cols = st.columns(len(formula_data['fields']))
-                
-                for idx, (field_id, field_name, unit) in enumerate(formula_data['fields']):
-                    with cols[idx]:
-                        label = f"{field_name}" + (f" [{unit}]" if unit else "")
-                        
-                        if field_id == target_field:
-                            st.text_input(
-                                label,
-                                value="❓ Найти",
-                                disabled=True,
-                                key=f"{formula_data['name']}_{field_id}_disabled_{category}"
-                            )
-                        else:
-                            value = st.number_input(
-                                label,
-                                value=None,
-                                format="%.4f",
-                                key=f"{formula_data['name']}_{field_id}_{category}",
-                                help=f"{self.divisor_fields.get(field_id, '')}" if field_id in self.divisor_fields else None
-                            )
-                            if value is not None:
-                                # Проверка на ноль для делителей
-                                if field_id in self.divisor_fields and abs(value) < 1e-10:
-                                    st.error(f"⚠️ {self.divisor_fields[field_id]}")
-                                    # Не добавляем значение в словарь, чтобы предотвратить вычисление
-                                else:
-                                    values[field_id] = value
-                
-                # Кнопка вычисления
-                if st.button(f"🧮 ВЫЧИСЛИТЬ", key=f"calc_{formula_data['name']}_{category}"):
-                    try:
-                        required_fields = [f[0] for f in formula_data['fields'] if f[0] != target_field]
-                        missing_fields = [f for f in required_fields if f not in values]
-                        
-                        if missing_fields:
-                            st.warning(f"⚠️ Пожалуйста, заполните все поля")
-                        else:
-                            # Валидация делителей перед вычислением
-                            try:
-                                self._validate_all_divisors(values, target_field)
-                            except ValueError as ve:
-                                st.error(f"❌ {str(ve)}")
-                                return
-                            
-                            result = self.calculate_formula(
-                                formula_data['name'],
-                                category,
-                                subcategory,
-                                values,
-                                target_field
-                            )
-                            
-                            if result is not None:
-                                field_name_full = ""
-                                unit_text = ""
-                                for field_id, fname, unit in formula_data['fields']:
-                                    if field_id == target_field:
-                                        field_name_full = fname
-                                        unit_text = f" {unit}" if unit else ""
-                                        break
-                                
-                                st.success(f"✅ **Результат:** {field_name_full} = {result:.4f}{unit_text}")
-                            else:
-                                st.error("❌ Не удалось вычислить результат")
-                    except Exception as e:
-                        st.error(f"❌ Ошибка: {str(e)}")
-                        
+            # Возвращаем данные формулы для Flask шаблона
+            return {
+                'formula_name': formula_data['name'],
+                'formula': formula_data['formula'],
+                'fields': formula_data['fields'],
+                'category': category,
+                'subcategory': subcategory
+            }
         except Exception as e:
-            st.error(f"Ошибка отображения калькулятора: {e}")
             print(f"Ошибка отображения калькулятора: {e}")
+            return {'error': str(e)}
     
     def calculate_formula(self, formula_name: str, category: str, subcategory: str, 
                          values: Dict[str, float], target: str) -> Optional[float]:
         """Вычисляет значение по формуле, используя DLL функции"""
         try:
             if not DLL_AVAILABLE:
-                st.warning("⚠️ DLL не доступна, используются стандартные расчеты")
+                print("⚠️ DLL не доступна, используются стандартные расчеты")
             
             # МАТЕМАТИКА - Планиметрия
             if category == "📐 МАТЕМАТИКА" and subcategory == "Планиметрия":

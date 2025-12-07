@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block content %}
+<nav class="navbar navbar-dark mb-4">
+    <div class="container-fluid">
+        <span class="navbar-brand mb-0 h1">🎓 {{ page_title }}</span>
+        <div>
+            <span class="text-white me-3">Добро пожаловать, {{ user.first_name }}! 👋</span>
+            <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">🚪 Выйти</a>
+        </div>
+    </div>
+</nav>
+
+<div class="row">
+    <!-- Боковая панель -->
+    <div class="col-md-3">
+        <div class="sidebar">
+            <h5>👤 Профиль</h5>
+            <p><strong>{{ user.first_name }} {{ user.last_name }}</strong></p>
+            <p>Роль: {{ user.role }}</p>
+            <p>Email: {{ user.email }}</p>
+            
+            {% if user.role == 'Ученик' %}
+                <p>Город: {{ user.city or 'Не указан' }}</p>
+                <p>Школа: {{ user.school or 'Не указана' }}</p>
+                <p>Класс: {{ user.class_number or 'Не указан' }}</p>
+            {% elif user.role == 'Учитель' %}
+                <p>Город: {{ user.city or 'Не указан' }}</p>
+                <p>Школа: {{ user.school or 'Не указана' }}</p>
+                {% if user.subjects %}
+                    <p>Предметы: {{ user.subjects }}</p>
+                {% endif %}
+            {% endif %}
+            
+            <hr>
+            <a href="{{ url_for('logout') }}" class="btn btn-danger w-100 mb-2">🚪 Выйти</a>
+        </div>
+    </div>
+    
+    <!-- Основной контент -->
+    <div class="col-md-9">
+        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'home' %}active{% endif %}" 
+                        onclick="showTab('home')" type="button">🏠 Главная</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'teachers' %}active{% endif %}" 
+                        onclick="showTab('teachers')" type="button">👨‍🏫 Учителя</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'chat' %}active{% endif %}" 
+                        onclick="showTab('chat')" type="button">💬 Чат-помощник</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'theory' %}active{% endif %}" 
+                        onclick="showTab('theory')" type="button">📚 Теория</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'testing' %}active{% endif %}" 
+                        onclick="showTab('testing')" type="button">📝 Тестирование</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'formulas' %}active{% endif %}" 
+                        onclick="showTab('formulas')" type="button">📐 Формулы</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'notifications' %}active{% endif %}" 
+                        onclick="showTab('notifications')" type="button">🔔 Уведомления</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'personal_chat' %}active{% endif %}" 
+                        onclick="showTab('personal_chat')" type="button">💭 Чат</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'requests' %}active{% endif %}" 
+                        onclick="showTab('requests')" type="button">📋 Заявки</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'calls' %}active{% endif %}" 
+                        onclick="showTab('calls')" type="button">📞 Звонки</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'lessons' %}active{% endif %}" 
+                        onclick="showTab('lessons')" type="button">🎥 Записи уроков</button>
+            </li>
+        </ul>
+        
+        <div class="tab-content mt-4">
+            <div id="home" class="tab-pane {% if active_tab == 'home' %}active{% endif %}">
+                {% include 'dashboard/home.html' %}
+            </div>
+            <div id="teachers" class="tab-pane {% if active_tab == 'teachers' %}active{% endif %}">
+                {% include 'dashboard/teachers.html' %}
+            </div>
+            <div id="chat" class="tab-pane {% if active_tab == 'chat' %}active{% endif %}">
+                {% include 'dashboard/chat.html' %}
+            </div>
+            <div id="theory" class="tab-pane {% if active_tab == 'theory' %}active{% endif %}">
+                {% include 'dashboard/theory.html' %}
+            </div>
+            <div id="testing" class="tab-pane {% if active_tab == 'testing' %}active{% endif %}">
+                {% include 'dashboard/testing.html' %}
+            </div>
+            <div id="formulas" class="tab-pane {% if active_tab == 'formulas' %}active{% endif %}">
+                {% include 'dashboard/formulas.html' %}
+            </div>
+            <div id="notifications" class="tab-pane {% if active_tab == 'notifications' %}active{% endif %}">
+                {% include 'dashboard/notifications.html' %}
+            </div>
+            <div id="personal_chat" class="tab-pane {% if active_tab == 'personal_chat' %}active{% endif %}">
+                {% include 'dashboard/personal_chat.html' %}
+            </div>
+            <div id="requests" class="tab-pane {% if active_tab == 'requests' %}active{% endif %}">
+                {% include 'dashboard/requests.html' %}
+            </div>
+            <div id="calls" class="tab-pane {% if active_tab == 'calls' %}active{% endif %}">
+                {% include 'dashboard/calls.html' %}
+            </div>
+            <div id="lessons" class="tab-pane {% if active_tab == 'lessons' %}active{% endif %}">
+                {% include 'dashboard/lessons.html' %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showTab(tabName) {
+    // Скрыть все вкладки
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+    });
+    
+    // Убрать active со всех кнопок
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    // Показать выбранную вкладку
+    document.getElementById(tabName).classList.add('active');
+    event.target.classList.add('active');
+    
+    // Обновить URL без перезагрузки страницы
+    const url = new URL(window.location);
+    url.searchParams.set('tab', tabName);
+    window.history.pushState({}, '', url);
+}
+</script>
+{% endblock %}
+

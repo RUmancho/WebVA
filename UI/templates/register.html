@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="text-center mb-4">
+            <h1 class="display-4">🎓 Регистрация</h1>
+            <hr>
+        </div>
+        
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('register') }}">
+                    <h3 class="mb-3">Основная информация</h3>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="email" class="form-label">Email*</label>
+                            <input type="email" class="form-control" id="email" name="email" 
+                                   placeholder="example@mail.com" 
+                                   value="{{ form_data.email if form_data else '' }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="role" class="form-label">Роль*</label>
+                            <select class="form-select" id="role" name="role" required onchange="toggleRoleFields()">
+                                <option value="">Выберите роль</option>
+                                <option value="Ученик" {% if form_data and form_data.role == 'Ученик' %}selected{% endif %}>Ученик</option>
+                                <option value="Учитель" {% if form_data and form_data.role == 'Учитель' %}selected{% endif %}>Учитель</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="password" class="form-label">Пароль*</label>
+                            <input type="password" class="form-control" id="password" name="password" 
+                                   placeholder="Минимум 6 символов" required>
+                            <small class="form-text text-muted">Минимум 6 символов, должен содержать буквы и цифры</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="password_confirm" class="form-label">Подтвердите пароль*</label>
+                            <input type="password" class="form-control" id="password_confirm" name="password_confirm" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="first_name" class="form-label">Имя*</label>
+                            <input type="text" class="form-control" id="first_name" name="first_name" 
+                                   placeholder="Иван" 
+                                   value="{{ form_data.first_name if form_data else '' }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="last_name" class="form-label">Фамилия*</label>
+                            <input type="text" class="form-control" id="last_name" name="last_name" 
+                                   placeholder="Иванов" 
+                                   value="{{ form_data.last_name if form_data else '' }}" required>
+                        </div>
+                    </div>
+                    
+                    <!-- Поля для ученика -->
+                    <div id="student_fields" style="display: none;">
+                        <h3 class="mb-3">Информация об ученике</h3>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="city" class="form-label">Город*</label>
+                                <input type="text" class="form-control" id="city" name="city" 
+                                       placeholder="Москва" 
+                                       value="{{ form_data.city if form_data else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="school" class="form-label">Школа*</label>
+                                <input type="text" class="form-control" id="school" name="school" 
+                                       placeholder="МБОУ СОШ №1" 
+                                       value="{{ form_data.school if form_data else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="class_number" class="form-label">Класс*</label>
+                                <input type="text" class="form-control" id="class_number" name="class_number" 
+                                       placeholder="10А" 
+                                       value="{{ form_data.class_number if form_data else '' }}">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Поля для учителя -->
+                    <div id="teacher_fields" style="display: none;">
+                        <h3 class="mb-3">Информация об учителе</h3>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="city_teacher" class="form-label">Город*</label>
+                                <input type="text" class="form-control" id="city_teacher" name="city" 
+                                       placeholder="Москва" 
+                                       value="{{ form_data.city if form_data else '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="school_teacher" class="form-label">Школа*</label>
+                                <input type="text" class="form-control" id="school_teacher" name="school" 
+                                       placeholder="МБОУ СОШ №1" 
+                                       value="{{ form_data.school if form_data else '' }}">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="subjects" class="form-label">Предметы*</label>
+                            <textarea class="form-control" id="subjects" name="subjects" rows="3" 
+                                      placeholder="Математика, Физика, Информатика">{{ form_data.subjects if form_data else '' }}</textarea>
+                            <small class="form-text text-muted">Укажите предметы через запятую</small>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-2">
+                            <button type="submit" class="btn btn-primary w-100">Зарегистрироваться</button>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <a href="{{ url_for('login') }}" class="btn btn-outline-secondary w-100">Назад к входу</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleRoleFields() {
+    const role = document.getElementById('role').value;
+    const studentFields = document.getElementById('student_fields');
+    const teacherFields = document.getElementById('teacher_fields');
+    
+    if (role === 'Ученик') {
+        studentFields.style.display = 'block';
+        teacherFields.style.display = 'none';
+        // Делаем поля обязательными
+        document.getElementById('city').required = true;
+        document.getElementById('school').required = true;
+        document.getElementById('class_number').required = true;
+        document.getElementById('city_teacher').required = false;
+        document.getElementById('school_teacher').required = false;
+        document.getElementById('subjects').required = false;
+    } else if (role === 'Учитель') {
+        studentFields.style.display = 'none';
+        teacherFields.style.display = 'block';
+        // Делаем поля обязательными
+        document.getElementById('city').required = false;
+        document.getElementById('school').required = false;
+        document.getElementById('class_number').required = false;
+        document.getElementById('city_teacher').required = true;
+        document.getElementById('school_teacher').required = true;
+        document.getElementById('subjects').required = true;
+    } else {
+        studentFields.style.display = 'none';
+        teacherFields.style.display = 'none';
+    }
+}
+
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    toggleRoleFields();
+});
+</script>
+{% endblock %}
+

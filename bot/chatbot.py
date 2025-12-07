@@ -1,4 +1,4 @@
-import streamlit as st
+from flask import session as flask_session
 from datetime import datetime
 import json
 import socket
@@ -12,9 +12,14 @@ class ChatBot:
     def __init__(self):
         self.bot_name = CHAT_BOT_NAME
         self.system_message = CHAT_SYSTEM_MESSAGE
-        # Не инициализируем session_state здесь, так как он может быть недоступен при импорте
-        # Инициализация будет выполнена в show_chat_interface()
         self._init_ollama_client()
+    
+    def _get_session(self):
+        """Получение объекта сессии Flask"""
+        try:
+            return flask_session
+        except RuntimeError:
+            return {}
     
     def _check_ollama_server_available(self):
         """Проверка доступности Ollama сервера через проверку порта"""
@@ -65,30 +70,31 @@ class ChatBot:
     def init_chat_session(self):
         """Инициализация сессии чата"""
         try:
-            if 'chat_messages' not in st.session_state:
-                st.session_state.chat_messages = [
-                    {
-                        "role": "assistant",
-                        "content": f"Привет! Я {self.bot_name}, ваш помощник. Как дела? Чем могу помочь?",
-                        "timestamp": datetime.now().strftime("%H:%M")
-                    }
-                ]
+            session = self._get_session()
+            if isinstance(session, dict):
+                if 'chat_messages' not in session:
+                    session['chat_messages'] = [
+                        {
+                            "role": "assistant",
+                            "content": f"Привет! Я {self.bot_name}, ваш помощник. Как дела? Чем могу помочь?",
+                            "timestamp": datetime.now().strftime("%H:%M")
+                        }
+                    ]
         except Exception as e:
-            # Если session_state недоступен, просто игнорируем ошибку
-            # Инициализация будет выполнена позже, когда session_state станет доступен
             print(f"Предупреждение: не удалось инициализировать сессию чата: {e}")
     
     def add_message(self, role, content):
         """Добавление сообщения в историю чата"""
-        if 'chat_messages' not in st.session_state:
-            self.init_chat_session()
-        
-        message = {
-            "role": role,
-            "content": content,
-            "timestamp": datetime.now().strftime("%H:%M")
-        }
-        st.session_state.chat_messages.append(message)
+        session = self._get_session()
+        if isinstance(session, dict):
+            if 'chat_messages' not in session:
+                self.init_chat_session()
+            message = {
+                "role": role,
+                "content": content,
+                "timestamp": datetime.now().strftime("%H:%M")
+            }
+            session['chat_messages'].append(message)
     
     def get_bot_response(self, user_message):
         """Получение ответа от бота"""
@@ -118,7 +124,11 @@ class ChatBot:
             context_parts = [self.system_message]
             
             # Добавляем последние сообщения из истории для контекста (последние 10)
-            recent_messages = st.session_state.chat_messages[-10:]
+            session = self._get_session()
+            if isinstance(session, dict):
+                recent_messages = session.get('chat_messages', [])[-10:]
+            else:
+                recent_messages = []
             for msg in recent_messages:
                 if msg['role'] == 'user':
                     context_parts.append(f"Пользователь: {msg['content']}")
@@ -189,68 +199,18 @@ class ChatBot:
         # Дефолтный ответ
         return "Интересный вопрос! Я стараюсь помочь с вопросами о регистрации, навигации по сайту и общими образовательными вопросами. Не могли бы вы переформулировать вопрос или задать что-то более конкретное?"
     
-    def show_chat_interface(self):
-        """Отображение интерфейса чата"""
-        # Инициализация сессии чата (если еще не инициализировано)
-        self.init_chat_session()
-        
-        st.header("💬 Чат с помощником")
-        
-        # Контейнер для сообщений
-        chat_container = st.container()
-        
-        with chat_container:
-            # Отображение истории сообщений
-            for message in st.session_state.chat_messages:
-                with st.chat_message(message["role"]):
-                    col1, col2 = st.columns([6, 1])
-                    with col1:
-                        st.write(message["content"])
-                    with col2:
-                        st.caption(message["timestamp"])
-        
-        # Поле ввода сообщения
-        user_input = st.chat_input("Введите ваше сообщение...")
-        
-        if user_input:
-            # Добавляем сообщение пользователя
-            self.add_message("user", user_input)
-            
-            # Отображаем сообщение пользователя
-            with st.chat_message("user"):
-                col1, col2 = st.columns([6, 1])
-                with col1:
-                    st.write(user_input)
-                with col2:
-                    st.caption(datetime.now().strftime("%H:%M"))
-            
-            # Получаем и отображаем ответ бота
-            with st.spinner("Помощник печатает..."):
-                bot_response = self.get_bot_response(user_input)
-            
-            self.add_message("assistant", bot_response)
-            
-            with st.chat_message("assistant"):
-                col1, col2 = st.columns([6, 1])
-                with col1:
-                    st.write(bot_response)
-                with col2:
-                    st.caption(datetime.now().strftime("%H:%M"))
-            
-            # Обновляем интерфейс
-            st.rerun()
-    
     def clear_chat_history(self):
         """Очистка истории чата"""
-        # Инициализация сессии чата (если еще не инициализировано)
         self.init_chat_session()
-        
-        st.session_state.chat_messages = [
+        session = self._get_session()
+        new_messages = [
             {
                 "role": "assistant",
                 "content": f"Привет! Я {self.bot_name}, ваш помощник. История чата очищена. Чем могу помочь?",
                 "timestamp": datetime.now().strftime("%H:%M")
             }
         ]
+        if isinstance(session, dict):
+            session['chat_messages'] = new_messages
 
 chatbot = ChatBot()

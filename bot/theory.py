@@ -1,4 +1,4 @@
-import streamlit as st
+from flask import session as flask_session
 import functools
 from typing import Optional, Callable
 from bot.settings import OPENAI_API_KEY
@@ -189,16 +189,21 @@ class TheoryManager:
     @log_function_execution
     def init_theory_session(self):
         """Инициализация сессии для теории"""
-        if 'theory_state' not in st.session_state:
-            st.session_state.theory_state = {
-                'current_page': 'subjects',
-                'selected_subject': None,
-                'selected_section': None,
-                'selected_topic': None,
-                'explanation_text': None,
-                'topic_chat_active': False,
-                'topic_chat_messages': []
-            }
+        # TODO: Полная адаптация для Flask UI требуется
+        try:
+            session = flask_session
+            if 'theory_state' not in session:
+                session['theory_state'] = {
+                    'current_page': 'subjects',
+                    'selected_subject': None,
+                    'selected_section': None,
+                    'selected_topic': None,
+                    'explanation_text': None,
+                    'topic_chat_active': False,
+                    'topic_chat_messages': []
+                }
+        except Exception as e:
+            print(f"Ошибка инициализации сессии теории: {e}")
     
     def _clean_text_from_cursor(self, text: str) -> str:
         """Очистить текст от курсора и лишних пробелов"""
@@ -219,34 +224,35 @@ class TheoryManager:
     def _save_explanation_text(self, text: Optional[str]) -> Optional[str]:
         """Безопасное сохранение текста объяснения с очисткой от курсора"""
         if not text:
-            st.session_state.theory_state['explanation_text'] = None
+            flask_session['theory_state']['explanation_text'] = None
             return None
         
         cleaned_text = self._clean_text_from_cursor(text)
-        st.session_state.theory_state['explanation_text'] = cleaned_text
+        flask_session['theory_state']['explanation_text'] = cleaned_text
         return cleaned_text
     
     @log_function_execution
     def show_theory_interface(self):
-        """Главный интерфейс теории"""
+        """Главный интерфейс теории - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
+        # TODO: UI теперь в Flask шаблонах (templates/dashboard/theory.html)
+        # Этот метод возвращает данные для шаблона вместо отображения UI
         self.init_theory_session()
-        
-        st.header("📚 Теоретические материалы")
-        self.show_navigation()
-        
-        page = st.session_state.theory_state['current_page']
-        if page == 'subjects':
-            self.show_subjects()
-        elif page == 'sections':
-            self.show_sections()
-        elif page == 'topics':
-            self.show_topics()
-        elif page == 'explanation':
-            self.show_explanation()
+        session = flask_session
+        state = session.get('theory_state', {})
+        return {
+            'current_page': state.get('current_page', 'subjects'),
+            'selected_subject': state.get('selected_subject'),
+            'selected_section': state.get('selected_section'),
+            'selected_topic': state.get('selected_topic'),
+            'explanation_text': state.get('explanation_text'),
+            'subjects': self.SUBJECTS_STRUCTURE
+        }
     
     def show_navigation(self):
-        """Показать навигационные кнопки"""
-        state = st.session_state.theory_state
+        """Показать навигационные кнопки - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
+        # TODO: UI теперь в Flask шаблонах
+        session = flask_session
+        state = session.get('theory_state', {})
         
         breadcrumbs = []
         if state['current_page'] != 'subjects':
@@ -258,18 +264,22 @@ class TheoryManager:
         if state['selected_topic']:
             breadcrumbs.append(state['selected_topic'])
         
-        if breadcrumbs:
-            st.markdown(" → ".join(breadcrumbs))
-            st.markdown("---")
+        # TODO: UI теперь в Flask шаблонах - эти вызовы st.* не используются
+        # if breadcrumbs:
+        #     st.markdown(" → ".join(breadcrumbs))
+        #     st.markdown("---")
+        # 
+        # if state['current_page'] != 'subjects':
+        #     if st.button("⬅️ Назад", key="theory_back_button"):
+        #         self.navigate_back()
+        #         st.rerun()
         
-        if state['current_page'] != 'subjects':
-            if st.button("⬅️ Назад", key="theory_back_button"):
-                self.navigate_back()
-                st.rerun()
+        # Возвращаем данные для Flask шаблона
+        return {'breadcrumbs': breadcrumbs, 'state': state}
     
     def navigate_back(self):
         """Навигация назад"""
-        state = st.session_state.theory_state
+        state = flask_session.get('theory_state', {})
         
         if state['current_page'] == 'explanation':
             state['current_page'] = 'topics'
@@ -283,90 +293,48 @@ class TheoryManager:
             state['selected_subject'] = None
     
     def show_subjects(self):
-        """Показать список предметов"""
-        st.subheader("Выберите предмет:")
-        
+        """Показать список предметов - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
+        # TODO: UI теперь в Flask шаблонах - все вызовы st.* закомментированы
         subjects = list(self.SUBJECTS_STRUCTURE.keys())
-        
-        for i in range(0, len(subjects), 3):
-            cols = st.columns(3)
-            for j in range(3):
-                if i + j < len(subjects):
-                    subject = subjects[i + j]
-                    with cols[j]:
-                        icon = self.SUBJECTS_STRUCTURE[subject]["icon"]
-                        if st.button(f"{icon} {subject}", key=f"subject_{subject}", use_container_width=True):
-                            state = st.session_state.theory_state
-                            state['selected_subject'] = subject
-                            state['current_page'] = 'sections'
-                            state['selected_section'] = None
-                            state['selected_topic'] = None
-                            state['explanation_text'] = None
-                            st.rerun()
+        return {'subjects': subjects, 'subjects_structure': self.SUBJECTS_STRUCTURE}
     
     def show_sections(self):
-        """Показать разделы выбранного предмета"""
-        state = st.session_state.theory_state
-        subject = state['selected_subject']
-        
+        """Показать разделы выбранного предмета - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
+        # TODO: UI теперь в Flask шаблонах
+        session = flask_session
+        state = session.get('theory_state', {})
+        subject = state.get('selected_subject')
         if not subject:
-            state['current_page'] = 'subjects'
-            st.rerun()
-            return
-        
-        icon = self.SUBJECTS_STRUCTURE[subject]["icon"]
-        st.subheader(f"{icon} {subject}")
-        st.write("Выберите раздел:")
-        
-        sections = self.SUBJECTS_STRUCTURE[subject]["sections"]
-        
-        for section_name in sections.keys():
-            if st.button(f"📖 {section_name}", key=f"section_{section_name}", use_container_width=True):
-                state['selected_section'] = section_name
-                state['current_page'] = 'topics'
-                state['selected_topic'] = None
-                state['explanation_text'] = None
-                st.rerun()
+            return {'error': 'Предмет не выбран'}
+        sections = self.SUBJECTS_STRUCTURE.get(subject, {}).get('sections', {})
+        return {'subject': subject, 'sections': sections}
     
     def show_topics(self):
-        """Показать темы выбранного раздела"""
-        state = st.session_state.theory_state
-        subject = state['selected_subject']
-        section = state['selected_section']
-        
+        """Показать темы выбранного раздела - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
+        # TODO: UI теперь в Flask шаблонах
+        session = flask_session
+        state = session.get('theory_state', {})
+        subject = state.get('selected_subject')
+        section = state.get('selected_section')
         if not subject or not section:
-            state['current_page'] = 'subjects'
-            st.rerun()
-            return
-        
-        icon = self.SUBJECTS_STRUCTURE[subject]["icon"]
-        st.subheader(f"{icon} {subject} → {section}")
-        st.write("Выберите тему для изучения:")
-        
-        topics_list = self.SUBJECTS_STRUCTURE[subject]["sections"][section]["topics"]
-        
-        for topic in topics_list:
-            if st.button(f"🎯 {topic}", key=f"topic_{topic}", use_container_width=True):
-                state['selected_topic'] = topic
-                state['current_page'] = 'explanation'
-                state['explanation_text'] = None
-                st.rerun()
+            return {'error': 'Предмет или раздел не выбран'}
+        topics = self.SUBJECTS_STRUCTURE.get(subject, {}).get('sections', {}).get(section, {}).get('topics', [])
+        return {'subject': subject, 'section': section, 'topics': topics}
             
     @log_function_execution
     def show_explanation(self):
         """Показать объяснение выбранной темы"""
-        state = st.session_state.theory_state
+        state = flask_session.get('theory_state', {})
         subject = state['selected_subject']
         section = state['selected_section']
         topic = state['selected_topic']
             
         if not all([subject, section, topic]):
             state['current_page'] = 'subjects'
-            st.rerun()
-            return
+            return {'error': 'Не все параметры выбраны'}
         
         icon = self.SUBJECTS_STRUCTURE[subject]["icon"]
-        st.subheader(f"{icon} {subject} → {section} → {topic}")
+        # TODO: UI теперь в Flask шаблонах
         
         # Проверяем, изменилась ли тема
         current_topic_key = f"{subject}_{section}_{topic}"
@@ -396,93 +364,73 @@ class TheoryManager:
             state['explanation_text'] = None
             explanation_text = None
         
+        # TODO: UI теперь в Flask шаблонах - все вызовы st.* закомментированы
         if not explanation_text:
-            with st.spinner("🔄 Генерирую объяснение..."):
-                try:
-                    full_text = self.get_topic_explanation(subject, section, topic, regenerate=False)
-                    full_text = self._clean_text_from_cursor(full_text)
+            # with st.spinner("🔄 Генерирую объяснение..."):
+            try:
+                full_text = self.get_topic_explanation(subject, section, topic, regenerate=False)
+                full_text = self._clean_text_from_cursor(full_text)
+                
+                if full_text and len(full_text) > 50:
+                    is_final_error = (
+                        f"## {topic}" in full_text and
+                        "К сожалению, не удалось сгенерировать" in full_text and
+                        "**Предмет:**" in full_text
+                    )
                     
-                    if full_text and len(full_text) > 50:
-                        is_final_error = (
-                            f"## {topic}" in full_text and
-                            "К сожалению, не удалось сгенерировать" in full_text and
-                            "**Предмет:**" in full_text
-                        )
-                        
-                        if is_final_error or len(full_text) > 200:
-                            explanation_text = self._save_explanation_text(full_text)
-                        else:
-                            # Проверяем короткие ответы на ошибки
-                            full_text_lower = full_text.lower()[:100]
-                            explicit_errors = [
-                                "к сожалению, не удалось сгенерировать",
-                                "не удалось сгенерировать объяснение",
-                                "оллама сервер недоступен",
-                                "что можно сделать:",
-                                "убедитесь, что модель"
-                            ]
-                            
-                            is_explicit_error = any(err in full_text_lower for err in explicit_errors)
-                            is_command = full_text.strip().startswith(("ollama", "Ollama"))
-                            
-                            if is_explicit_error or is_command:
-                                local_explanation = self._get_local_explanation(subject, section, topic)
-                                if local_explanation:
-                                    explanation_text = self._save_explanation_text(local_explanation)
-                                else:
-                                    explanation_text = self._get_error_message(subject, section, topic)
-                                    explanation_text = self._clean_text_from_cursor(explanation_text)
-                                    self._save_explanation_text(explanation_text)
-                            else:
-                                explanation_text = self._save_explanation_text(full_text)
+                    if is_final_error or len(full_text) > 200:
+                        explanation_text = self._save_explanation_text(full_text)
                     else:
-                        raise Exception("Получен пустой или некорректный ответ от модели")
-                except Exception as e:
-                    explanation_text = self._get_error_message(subject, section, topic)
-                    explanation_text = self._clean_text_from_cursor(explanation_text)
-                    self._save_explanation_text(explanation_text)
+                        # Проверяем короткие ответы на ошибки
+                        full_text_lower = full_text.lower()[:100]
+                        explicit_errors = [
+                            "к сожалению, не удалось сгенерировать",
+                            "не удалось сгенерировать объяснение",
+                            "оллама сервер недоступен",
+                            "что можно сделать:",
+                            "убедитесь, что модель"
+                        ]
+                        
+                        is_explicit_error = any(err in full_text_lower for err in explicit_errors)
+                        is_command = full_text.strip().startswith(("ollama", "Ollama"))
+                        
+                        if is_explicit_error or is_command:
+                            local_explanation = self._get_local_explanation(subject, section, topic)
+                            if local_explanation:
+                                explanation_text = self._save_explanation_text(local_explanation)
+                            else:
+                                explanation_text = self._get_error_message(subject, section, topic)
+                                explanation_text = self._clean_text_from_cursor(explanation_text)
+                                self._save_explanation_text(explanation_text)
+                        else:
+                            explanation_text = self._save_explanation_text(full_text)
+                else:
+                    raise Exception("Получен пустой или некорректный ответ от модели")
+            except Exception as e:
+                explanation_text = self._get_error_message(subject, section, topic)
+                explanation_text = self._clean_text_from_cursor(explanation_text)
+                self._save_explanation_text(explanation_text)
         
+        # TODO: UI теперь в Flask шаблонах - все вызовы st.* удалены
         # Отображаем объяснение
         if explanation_text:
             clean_text = self._clean_text_from_cursor(explanation_text)
-            if clean_text:
-                explanation_container = st.empty()
-                try:
-                    explanation_container.markdown(clean_text)
-                except Exception:
-                    st.markdown(clean_text)
-                
-                if clean_text != explanation_text:
-                    self._save_explanation_text(clean_text)
+            if clean_text != explanation_text:
+                self._save_explanation_text(clean_text)
         
-        # Кнопки управления
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔄 Получить другое объяснение", key="regenerate_explanation_button", use_container_width=True):
-                state['explanation_text'] = None
-                state['explanation_displayed'] = False
-                state['topic_chat_active'] = False
-                state['topic_chat_messages'] = []
-                st.rerun()
-        
-        with col2:
-            chat_button_text = "❌ Закрыть чат" if state.get('topic_chat_active') else "💬 Задать вопрос по теме"
-            if st.button(chat_button_text, key="toggle_topic_chat_button", use_container_width=True):
-                state['topic_chat_active'] = not state.get('topic_chat_active', False)
-                if not state['topic_chat_active']:
-                    state['topic_chat_messages'] = []
-                st.rerun()
-        
-        # Показываем чат по теме, если он активен
-        if state.get('topic_chat_active') and explanation_text:
-            self._show_topic_chat(subject, section, topic, explanation_text)
+        # Возвращаем данные для Flask шаблона
+        return {
+            'subject': subject,
+            'section': section,
+            'topic': topic,
+            'explanation_text': explanation_text,
+            'topic_chat_active': state.get('topic_chat_active', False)
+        }
     
     def _show_topic_chat(self, subject: str, section: str, topic: str, explanation_text: str):
-        """Показать чат для обсуждения темы"""
-        st.markdown("---")
-        st.subheader("💬 Обсуждение темы")
-        
-        state = st.session_state.theory_state
+        """Показать чат для обсуждения темы - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
+        # TODO: UI теперь в Flask шаблонах - все вызовы st.* удалены
+        state = flask_session.get('theory_state', {})
         
         # Инициализируем сообщения чата, если их нет
         if 'topic_chat_messages' not in state:
@@ -495,44 +443,13 @@ class TheoryManager:
                 "content": f"Привет! Я готов ответить на твои вопросы по теме '{topic}' из раздела '{section}' предмета '{subject}'. Задавай вопросы!"
             }]
         
-        # Отображаем историю сообщений
-        for message in state['topic_chat_messages']:
-            with st.chat_message(message["role"]):
-                st.write(message["content"])
-        
-        # Поле ввода вопроса
-        user_question = st.chat_input("Задайте вопрос по теме...")
-        
-        if user_question:
-            # Добавляем вопрос пользователя
-            state['topic_chat_messages'].append({
-                "role": "user",
-                "content": user_question
-            })
-            
-            # Отображаем вопрос
-            with st.chat_message("user"):
-                st.write(user_question)
-            
-            # Получаем ответ от LLM
-            with st.chat_message("assistant"):
-                with st.spinner("Думаю..."):
-                    try:
-                        answer = self._get_topic_chat_response(subject, section, topic, explanation_text, user_question, state['topic_chat_messages'])
-                        st.write(answer)
-                        state['topic_chat_messages'].append({
-                            "role": "assistant",
-                            "content": answer
-                        })
-                    except Exception as e:
-                        error_msg = f"Извините, произошла ошибка при обработке вопроса: {e}"
-                        st.error(error_msg)
-                        state['topic_chat_messages'].append({
-                            "role": "assistant",
-                            "content": error_msg
-                        })
-            
-            st.rerun()
+        # Возвращаем данные для Flask шаблона
+        return {
+            'subject': subject,
+            'section': section,
+            'topic': topic,
+            'messages': state['topic_chat_messages']
+        }
     
     def _get_topic_chat_response(self, subject: str, section: str, topic: str, explanation_text: str, 
                                   user_question: str, chat_history: list) -> str:
