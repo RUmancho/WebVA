@@ -7,31 +7,11 @@ from logger import console
 
 python_filename = "llm"
 
-class Mode:
-    HELP_PROBLEM = "help_problem"
-    EXPLAIN = "explain"
-    TIPS = "tips"
-    PLAN = "plan"
-    CHECK_SOLUTION = "check_solution"
-    PRACTICE = "practice"
-    GENERATE_TASK = "generate_task"
-    
-    COMPUTATIONAL_SKILLS = "computational_skills"
-    EXPRESSION_VALUE = "expression_value"
-    FORMULAS_WORK = "formulas_work"
-    SHORTHAND_FORMULAS = "shorthand_formulas"
-    EQUATIONS = "equations"
-    INEQUALITIES = "inequalities"
-    GRAPHS = "graphs"
-    TRIGONOMETRY = "trigonometry"
-    PROBABILITY = "probability"
-    
-    TRIANGLES = "triangles"
-    QUADRILATERALS = "quadrilaterals"
-    CIRCLES = "circles"
-    AREAS_VOLUMES = "areas_volumes"
-    COORDINATE_GEOMETRY = "coordinate_geometry"
-
+# Пути к папкам промптов
+PROMPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
+ROLES_DIR = os.path.join(PROMPTS_DIR, "roles")
+TASKS_DIR = os.path.join(PROMPTS_DIR, "tasks")
+ANSWERS_DIR = os.path.join(PROMPTS_DIR, "answers")
 
 class Commands:
     class Student:
@@ -72,86 +52,117 @@ class Commands:
         ATTACH_ALL = "прикрепить всех"
 
 
-MODE_TO_FILE = {
-    Mode.HELP_PROBLEM: "help_problem.txt",
-    Mode.EXPLAIN: "explain.txt",
-    Mode.TIPS: "tips.txt",
-    Mode.PLAN: "plan.txt",
-    Mode.CHECK_SOLUTION: "check_solution.txt",
-    Mode.PRACTICE: "practice.txt",
-    Mode.GENERATE_TASK: "generate_task.txt",
-    Mode.COMPUTATIONAL_SKILLS: "computational_skills.txt",
-    Mode.EXPRESSION_VALUE: "expression_value.txt",
-    Mode.FORMULAS_WORK: "formulas_work.txt",
-    Mode.SHORTHAND_FORMULAS: "shorthand_formulas.txt",
-    Mode.EQUATIONS: "equations.txt",
-    Mode.INEQUALITIES: "inequalities.txt",
-    Mode.GRAPHS: "graphs.txt",
-    Mode.TRIGONOMETRY: "trigonometry.txt",
-    Mode.PROBABILITY: "probability.txt",
-    Mode.TRIANGLES: "triangles.txt",
-    Mode.QUADRILATERALS: "quadrilaterals.txt",
-    Mode.CIRCLES: "circles.txt",
-    Mode.AREAS_VOLUMES: "areas_volumes.txt",
-    Mode.COORDINATE_GEOMETRY: "coordinate_geometry.txt"
-}
-
 class Prompt:
-    def __init__(self):
+    def __init__(self, role: str = "", task: str = "", answer: str = ""):
         self.__prompt_template = "role: {role}\ntask: {task}\nanswer: {answer}"
         self._prompt = ""
+        
+        # Инициализируем все атрибуты
         self.__role = ""
         self.__task = ""
         self.__answer = ""
-
-    @console.debug(python_filename)
-    def set_role(self, descripton: str) -> None:
-        self.__role = descripton
-
-    @console.debug(python_filename)
-    def set_task(self, description: str) -> None:
-        self.__task = description
+        
+        # Устанавливаем значения через сеттеры
+        if role:
+            self.set_role(role)
+        if task:
+            self.set_task(task)
+        if answer:
+            self.set_answer(answer)
     
-    @console.debug(python_filename)
+    def __validator(self, description: str) -> bool:
+        if not isinstance(description, str):
+            raise TypeError("description must be a string")
+        elif len(description) <= 2:
+            raise ValueError("description must be longer than 2 characters")
+        return True
+    
+    def set_role(self, description: str) -> None:
+        if self.__validator(description):
+            self.__role = description
+    
+    def set_task(self, description: str) -> None:
+        if self.__validator(description):
+            self.__task = description
+    
     def set_answer(self, description: str) -> None:
-        self.__answer = description
-
-    @console.debug(python_filename)
-    def prompt(self):
-        self.__prompt = self.__prompt_template.format(role = self.__role, task = self.__task, answer = self.__answer)
-        return self.__prompt
-
-    @console.debug(python_filename)
-    def save(self, filepath):
+        if self.__validator(description):
+            self.__answer = description
+    
+    def get_role(self) -> str:
+        return self.__role
+    
+    def get_task(self) -> str:
+        return self.__task
+    
+    def get_answer(self) -> str:
+        return self.__answer
+    
+    def prompt(self) -> str:
+        if not all([self.__role, self.__task, self.__answer]):
+            raise ValueError("Role, task and answer must be set before generating prompt")
+        
+        self._prompt = self.__prompt_template.format(
+            role=self.__role,
+            task=self.__task,
+            answer=self.__answer
+        )
+        return self._prompt
+    
+    def save(self, filepath: str) -> None:
         with open(filepath, 'w', encoding="utf-8") as file:
             file.write(self.prompt())
+    
+    @staticmethod
+    def load(filepath: str) -> str:
+        try:
+            with open(filepath, 'r', encoding="utf-8") as file:
+                return file.read()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File not found: {filepath}")
+    
+    def create_prompt(self, role_path: str, task_path: str, answer_path: str) -> str:
+        self.set_role(self.load(role_path))
+        self.set_task(self.load(task_path))
+        self.set_answer(self.load(answer_path))
+        return self.prompt()
 
-    @console.debug(python_filename)
-    def load_role(self, filepath: str) -> None:
-        self.__role = self.__load(filepath)
-
-    @console.debug(python_filename)
-    def load_task(self, filepath: str) -> None:
-        self.__task = self.__load(filepath)
-
-    @console.debug(python_filename)
-    def load_answer(self, filepath: str) -> None:
-        self.__task = self.__load(filepath)
-
-    @console.debug(python_filename)
-    def __load(filepath: str) -> str:
-        with open(filepath, 'r', encoding="utf-8") as file:
-            return file.read()
 
 class LLM:
     def __init__(self, provider, model: str, **kwargs):
         self.client = provider(model=model, **kwargs)
-        self.prompt = Prompt()
     
     @console.debug(python_filename)
-    def ask(self) -> str:
-        response = self.client.invoke(self.prompt)
-        return response
+    def ask(self, prompt: Prompt) -> str:
+        """Отправить промпт и получить ответ."""
+        try:
+            response = self.client.invoke(prompt.prompt())
+            return response
+        except Exception as e:
+            print(f"[ERROR] Ошибка при запросе к LLM: {e}")
+            return ""
+    
+    @console.debug(python_filename)
+    def ask_with_params(self, prompt: Prompt, **params) -> str:
+        """
+        Отправить промпт с подстановкой параметров.
+        
+        Args:
+            prompt: Экземпляр Prompt
+            **params: Параметры для подстановки (n=5, text="тема")
+        
+        Returns:
+            str: Ответ от LLM
+        """
+        try:
+            prompt_text = prompt.prompt()
+            for key, value in params.items():
+                prompt_text = prompt_text.replace("{" + key + "}", str(value))
+            response = self.client.invoke(prompt_text)
+            return response
+        except Exception as e:
+            print(f"[ERROR] Ошибка при запросе к LLM: {e}")
+            return ""
     
     @console.debug(python_filename)
     def calculate(self, expression: str) -> str:
@@ -192,5 +203,42 @@ class LLM:
         return matches[0] if matches else text
 
 class AcademicLLM(LLM):
+    """LLM для академических задач с предзагруженными промптами."""
+    
+    class Tasks:
+        """Пути к файлам задач."""
+        HELP_PROBLEM = os.path.join(TASKS_DIR, "help_problem.txt")
+        EXPLAIN = os.path.join(TASKS_DIR, "explain.txt")
+        TIPS = os.path.join(TASKS_DIR, "tips.txt")
+        PLAN = os.path.join(TASKS_DIR, "plan.txt")
+        CHECK_SOLUTION = os.path.join(TASKS_DIR, "check_solution.txt")
+        PRACTICE = os.path.join(TASKS_DIR, "practice.txt")
+        GENERATE_TASK = os.path.join(TASKS_DIR, "generate_task.txt")
+        COMPUTATIONAL_SKILLS = os.path.join(TASKS_DIR, "computational_skills.txt")
+        EXPRESSION_VALUE = os.path.join(TASKS_DIR, "expression_value.txt")
+        FORMULAS_WORK = os.path.join(TASKS_DIR, "formulas_work.txt")
+        SHORTHAND_FORMULAS = os.path.join(TASKS_DIR, "shorthand_formulas.txt")
+        EQUATIONS = os.path.join(TASKS_DIR, "equations.txt")
+        INEQUALITIES = os.path.join(TASKS_DIR, "inequalities.txt")
+        GRAPHS = os.path.join(TASKS_DIR, "graphs.txt")
+        TRIGONOMETRY = os.path.join(TASKS_DIR, "trigonometry.txt")
+        PROBABILITY = os.path.join(TASKS_DIR, "probability.txt")
+        TRIANGLES = os.path.join(TASKS_DIR, "triangles.txt")
+        QUADRILATERALS = os.path.join(TASKS_DIR, "quadrilaterals.txt")
+        CIRCLES = os.path.join(TASKS_DIR, "circles.txt")
+        AREAS_VOLUMES = os.path.join(TASKS_DIR, "areas_volumes.txt")
+        COORDINATE_GEOMETRY = os.path.join(TASKS_DIR, "coordinate_geometry.txt")
+    
+    class Roles:
+        """Пути к файлам ролей."""
+        MATH_TEACHER = os.path.join(ROLES_DIR, "math_teacher.txt")
+        CHAT_HELPER = os.path.join(ROLES_DIR, "chat_helper.txt")
+    
+    class Answers:
+        """Пути к файлам форматов ответа."""
+        CALCULATION = os.path.join(ANSWERS_DIR, "calculation.txt")
+        CONCISE = os.path.join(ANSWERS_DIR, "concise.txt")
+        DETAILED = os.path.join(ANSWERS_DIR, "detailed.txt")
+
     def __init__(self, provider, model: str, **kwargs):
-        super().__init__(provider, model, )
+        super().__init__(provider, model, **kwargs)
