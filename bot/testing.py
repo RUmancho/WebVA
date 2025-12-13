@@ -1,1359 +1,414 @@
+"""
+Модуль управления системой тестирования.
+Использует DLL генератор для математики и LLM для других предметов.
+"""
+
 from flask import session as flask_session
 import json
 import random
 import socket
+from typing import Optional, Dict, List, Any
 from bot.settings import OPENAI_API_KEY
 from bot.theory import TheoryManager
 from langchain_ollama import OllamaLLM
 
+
+# Константы
+DEFAULT_MODEL = "deepseek-r1:7b"
+FALLBACK_MODEL = "deepseek:7b"
+OLLAMA_PORT = 11434
+OLLAMA_HOST = "localhost"
+NUM_QUESTIONS = 5
+
+# Уровни сложности
+DIFFICULTY_LEVELS = {
+    "Лёгкий": {"icon": "🟢", "description": "Базовые вопросы", "style": "простые вопросы"},
+    "Средний": {"icon": "🟡", "description": "Средний уровень", "style": "вопросы среднего уровня"},
+    "Хардкор": {"icon": "🔴", "description": "Сложные вопросы", "style": "сложные вопросы"}
+}
+
+# Стикеры для предметов (сокращённо)
+SUBJECT_DATA = {
+    "Алгебра": {"emojis": "🔢➕➖✖️➗", "comments": ["Икс найден! 🕵️", "Формулы покорены! 💪"]},
+    "Геометрия": {"emojis": "📐📏🔺⬜", "comments": ["Теорема доказана! 👑", "Углы покорены! 🔺"]},
+    "Физика": {"emojis": "⚡🔬🌊🚀", "comments": ["Ньютон гордится! 🍎", "Законы соблюдены! ⚡"]},
+    "Химия": {"emojis": "🧪⚗️🔬💎", "comments": ["Реакция успешна! 💥", "Менделеев доволен! 👏"]},
+    "Биология": {"emojis": "🧬🔬🌱🦋", "comments": ["Дарвин восхищён! 🐒", "ДНК расшифрована! 🧬"]},
+    "География": {"emojis": "🌍🗺️🏔️🌊", "comments": ["Континенты найдены! 🗺️", "GPS не нужен! 🧭"]},
+    "История": {"emojis": "🏛️👑⚔️📜", "comments": ["История покорена! 👑", "Эпохи изучены! ⏳"]},
+    "Обществознание": {"emojis": "👥🏛️⚖️🗳️", "comments": ["Общество понято! 👥", "Социум под контролем! 🌐"]},
+    "Русский язык": {"emojis": "📝📚✒️📖", "comments": ["Пушкин аплодирует! 👏", "Грамматика покорена! ✍️"]},
+    "Английский язык": {"emojis": "🇬🇧🇺🇸💬📖", "comments": ["English conquered! 🎭", "Welcome to the club! 🎉"]},
+    "Информатика": {"emojis": "💻🖥️⌨️🤖", "comments": ["Код работает! 🐛❌", "Алгоритм оптимизирован! 🔥"]}
+}
+
+
 class TestingManager:
-    """Класс для управления системой тестирования"""
+    """Менеджер тестирования"""
     
     def __init__(self):
         self.api_key = OPENAI_API_KEY
         self.theory_manager = TheoryManager()
         self.SUBJECTS_STRUCTURE = self.theory_manager.SUBJECTS_STRUCTURE
-        # Не инициализируем session_state здесь, так как он может быть недоступен при импорте
-        # Инициализация будет выполнена в show_testing_interface()
-        self._init_ollama_client()
+        self.ollama_client = None
+        self.math_generator = None
+        
+        self._init_ollama()
+        self._init_math_generator()
     
-    def _check_ollama_server_available(self):
-        """Проверка доступности Ollama сервера через проверку порта"""
+    def _check_ollama(self) -> bool:
+        """Проверка Ollama сервера"""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(1)
-            result = sock.connect_ex(('localhost', 11434))
+            result = sock.connect_ex((OLLAMA_HOST, OLLAMA_PORT))
             sock.close()
             return result == 0
-        except Exception as e:
-            print(f"Ошибка проверки доступности Ollama сервера: {e}")
+        except Exception:
             return False
     
-    def _init_ollama_client(self):
-        """Инициализация Ollama клиента для генерации тестов"""
-        # Проверяем доступность сервера перед инициализацией
-        if not self._check_ollama_server_available():
-            print("Ollama сервер недоступен (порт 11434 не отвечает), тесты будут генерироваться локально")
-            self.ollama_client = None
-            self.model_name = "deepseek-r1:7b"
+    def _init_ollama(self):
+        """Инициализация Ollama"""
+        if not self._check_ollama():
+            print("Ollama недоступен, тесты будут генерироваться локально")
             return
         
         try:
-            # Используем deepseek-r1:7b с отключенным reasoning для быстрых ответов
-            self.ollama_client = OllamaLLM(
-                model="deepseek-r1:7b", 
-                temperature=0.7,
-                reasoning=False  # Отключаем reasoning для быстрой генерации
-            )
-            self.model_name = "deepseek-r1:7b"
-            print("Генерация тестов использует модель: deepseek-r1:7b")
+            self.ollama_client = OllamaLLM(model=DEFAULT_MODEL, temperature=0.7, reasoning=False)
+            print(f"✓ Ollama: {DEFAULT_MODEL}")
         except Exception as e:
             try:
-                # Fallback на deepseek:7b
-                print(f"Модель deepseek-r1:7b недоступна для тестов, пробуем deepseek:7b: {e}")
-                self.ollama_client = OllamaLLM(model="deepseek:7b", temperature=0.7)
-                self.model_name = "deepseek:7b"
-                print("Генерация тестов использует модель: deepseek:7b")
-            except Exception as e2:
-                self.ollama_client = None
-                self.model_name = "deepseek-r1:7b"
-                print(f"Ошибка инициализации Ollama клиента для тестов: {e2}")
-                print("Убедитесь, что Ollama установлен и модель deepseek-r1:7b загружена")
-        
-        # Уровни сложности
-        self.DIFFICULTY_LEVELS = {
-            "Лёгкий": {
-                "icon": "🟢",
-                "description": "Базовые вопросы, подходят для начального изучения темы",
-                "questions_style": "простые вопросы с очевидными ответами"
-            },
-            "Средний": {
-                "icon": "🟡", 
-                "description": "Вопросы среднего уровня, требуют понимания материала",
-                "questions_style": "вопросы среднего уровня сложности, требующие анализа"
-            },
-            "Хардкор": {
-                "icon": "🔴",
-                "description": "Сложные вопросы для глубокого понимания темы",
-                "questions_style": "сложные аналитические вопросы, требующие глубокого понимания"
-            }
+                self.ollama_client = OllamaLLM(model=FALLBACK_MODEL, temperature=0.7)
+                print(f"✓ Ollama fallback: {FALLBACK_MODEL}")
+            except Exception:
+                print(f"✗ Ollama недоступен: {e}")
+    
+    def _init_math_generator(self):
+        """Инициализация математического генератора"""
+        try:
+            from math_generator import get_math_generator
+            self.math_generator = get_math_generator()
+            status = "DLL + Python" if self.math_generator.dll_available else "Python"
+            print(f"✓ Математический генератор: {status}")
+        except Exception as e:
+            print(f"✗ Математический генератор: {e}")
+    
+    def init_session(self):
+        """Инициализация сессии"""
+        try:
+            if 'testing_state' not in flask_session:
+                flask_session['testing_state'] = {
+                    'current_page': 'subjects', 'selected_subject': None,
+                    'selected_section': None, 'selected_topic': None,
+                    'selected_difficulty': None, 'current_test': None,
+                    'user_answers': {}, 'test_results': None, 'current_question': 0
+                }
+        except Exception as e:
+            print(f"Ошибка инициализации сессии: {e}")
+    
+    def show_testing_interface(self) -> Dict[str, Any]:
+        """Главный интерфейс"""
+        self.init_session()
+        state = flask_session.get('testing_state', {})
+        return {
+            'current_page': state.get('current_page', 'subjects'),
+            'selected_subject': state.get('selected_subject'),
+            'selected_section': state.get('selected_section'),
+            'selected_topic': state.get('selected_topic'),
+            'selected_difficulty': state.get('selected_difficulty'),
+            'subjects': self.SUBJECTS_STRUCTURE
         }
-        
-        # Тематические стикеры и анимации для каждого предмета
-        self.SUBJECT_STICKERS = {
-            "Алгебра": {
-                "stickers": ["🔢", "➕", "➖", "✖️", "➗", "🧮", "📊", "📈", "📉", "🔣"],
-                "animation_emojis": "🔢➕➖✖️➗🧮📊📈📉🔣💯✨",
-                "funny_comments": [
-                    "Икс найден! Он больше не скрывается! 🕵️",
-                    "Формулы покорены! Математика сдается! 🏳️",
-                    "Уравнение решено! Алгебра не устоит! 💪",
-                    "Переменные под контролем! 🎯"
-                ],
-                "topic_stickers": {
-                    "Линейные уравнения": "📏➡️",
-                    "Квадратные уравнения": "2️⃣🔢",
-                    "Функции": "📈📉"
-                }
-            },
-            "Геометрия": {
-                "stickers": ["📐", "📏", "🔺", "⬜", "🔴", "📊", "📋", "✏️", "🎯", "🏗️"],
-                "animation_emojis": "📐📏🔺⬜🔴📊📋✏️🎯🏗️📏✨",
-                "funny_comments": [
-                    "Углы покорены! Треугольники сдались! 🔺",
-                    "Теорема Пифагора одобряет! 👑",
-                    "Окружности в восторге от ваших знаний! ⭕",
-                    "Площади и объемы вычислены! 📊"
-                ],
-                "topic_stickers": {
-                    "Треугольники": "🔺📐",
-                    "Окружность": "⭕🔴",
-                    "Площади фигур": "📊📏"
-                }
-            },
-            "Физика": {
-                "stickers": ["⚡", "🔬", "🌊", "🎭", "⚛️", "🔋", "💡", "🌟", "🚀", "⭐"],
-                "animation_emojis": "⚡🔬🌊🎭⚛️🔋💡🌟🚀⭐🔥✨",
-                "funny_comments": [
-                    "Ньютон бы гордился! Яблоко падает правильно! 🍎",
-                    "Электроны танцуют от радости! ⚡💃",
-                    "Законы физики соблюдены! Порядок во вселенной! 🌌",
-                    "Энергия сохранена! Физика покорена! 🔋"
-                ],
-                "topic_stickers": {
-                    "Механика": "⚙️🔧",
-                    "Электричество": "⚡🔌",
-                    "Оптика": "💡🔍"
-                }
-            },
-            "Химия": {
-                "stickers": ["🧪", "⚗️", "🔬", "💊", "🌡️", "🧬", "💎", "🔥", "💧", "💨"],
-                "animation_emojis": "🧪⚗️🔬💊🌡️🧬💎🔥💧💨⚛️✨",
-                "funny_comments": [
-                    "Реакция прошла успешно! Без взрывов! 💥😅",
-                    "Менделеев аплодирует! Таблица довольна! 👏",
-                    "Молекулы в восторге! Атомы ликуют! ⚛️",
-                    "Химия покорена без противогаза! 🥽"
-                ],
-                "topic_stickers": {
-                    "Атомное строение": "⚛️🔬",
-                    "Кислоты": "🧪💧",
-                    "Органическая химия": "🧬💊"
-                }
-            },
-            "Биология": {
-                "stickers": ["🧬", "🔬", "🌱", "🐛", "🦋", "🌸", "🍃", "🧫", "🔍", "🌿"],
-                "animation_emojis": "🧬🔬🌱🐛🦋🌸🍃🧫🔍🌿🌺✨",
-                "funny_comments": [
-                    "Дарвин бы восхитился! Эволюция знаний! 🐒➡️🧑‍🎓",
-                    "Клетки делятся... знаниями! 🧫",
-                    "ДНК расшифрована! Код жизни взломан! 🧬",
-                    "Биосфера покорена! Природа сдается! 🌍"
-                ],
-                "topic_stickers": {
-                    "Клеточная теория": "🧫🔬",
-                    "Эволюция": "🐒➡️🧑",
-                    "Фотосинтез": "🌱☀️"
-                }
-            },
-            "География": {
-                "stickers": ["🌍", "🗺️", "🏔️", "🌊", "🏝️", "🌋", "🧭", "📍", "🛰️", "🌐"],
-                "animation_emojis": "🌍🗺️🏔️🌊🏝️🌋🧭📍🛰️🌐🗾✨",
-                "funny_comments": [
-                    "Колумб бы позавидовал! Все континенты найдены! 🗺️",
-                    "GPS не нужен! Вы знаете все координаты! 🧭",
-                    "Экватор покорен! Полюса сдались! 🌍",
-                    "Атлас плачет от восторга! 📚"
-                ],
-                "topic_stickers": {
-                    "Климат": "🌡️🌦️",
-                    "Океаны": "🌊🐋",
-                    "Горы": "🏔️⛰️"
-                }
-            },
-            "История": {
-                "stickers": ["🏛️", "👑", "⚔️", "📜", "🏺", "🗿", "🏰", "📚", "⏳", "🎭"],
-                "animation_emojis": "🏛️👑⚔️📜🏺🗿🏰📚⏳🎭🏺✨",
-                "funny_comments": [
-                    "Цезарь бы гордился! История покорена! 👑",
-                    "Машина времени не нужна! Вы знаете все эпохи! ⏳",
-                    "Летописи переписаны! Историки аплодируют! 📜",
-                    "Прошлое раскрыто! Тайны веков разгаданы! 🔍"
-                ],
-                "topic_stickers": {
-                    "Древний Рим": "🏛️👑",
-                    "Средние века": "🏰⚔️",
-                    "Новое время": "📚⏳"
-                }
-            },
-            "Обществознание": {
-                "stickers": ["👥", "🏛️", "⚖️", "🗳️", "💰", "📈", "🌐", "🤝", "📊", "💼"],
-                "animation_emojis": "👥🏛️⚖️🗳️💰📈🌐🤝📊💼🌍✨",
-                "funny_comments": [
-                    "Общество покорено! Социум под контролем! 👥",
-                    "Политологи в восторге! Демократия ликует! 🗳️",
-                    "Экономика сдается! Рынок побежден! 📈",
-                    "Социальные науки аплодируют! 👏"
-                ],
-                "topic_stickers": {
-                    "Политика": "🏛️🗳️",
-                    "Экономика": "💰📈",
-                    "Социология": "👥🤝"
-                }
-            },
-            "Русский язык": {
-                "stickers": ["📝", "📚", "✒️", "📖", "🎭", "📜", "💬", "🔤", "📄", "✍️"],
-                "animation_emojis": "📝📚✒️📖🎭📜💬🔤📄✍️📓✨",
-                "funny_comments": [
-                    "Пушкин аплодирует! Язык покорен! 👏",
-                    "Орфография сдается! Пунктуация побеждена! ✍️",
-                    "Словари переписаны! Грамматика покорена! 📚",
-                    "Великий и могучий подчинился! 🇷🇺"
-                ],
-                "topic_stickers": {
-                    "Орфография": "✍️📝",
-                    "Синтаксис": "📖📄",
-                    "Морфология": "🔤📚"
-                }
-            },
-            "Английский язык": {
-                "stickers": ["🇬🇧", "🇺🇸", "💬", "📖", "🎭", "✈️", "🌐", "📱", "🎤", "📺"],
-                "animation_emojis": "🇬🇧🇺🇸💬📖🎭✈️🌐📱🎤📺🗣️✨",
-                "funny_comments": [
-                    "Шекспир бы восхитился! English is conquered! 🎭",
-                    "Биг Бен звонит в честь ваших знаний! 🔔",
-                    "Британская королева одобряет! 👑",
-                    "Welcome to the club! You speak English! 🎉"
-                ],
-                "topic_stickers": {
-                    "Грамматика": "📖✍️",
-                    "Лексика": "💬🗣️",
-                    "Разговорная речь": "🎤💭"
-                }
-            },
-            "Информатика": {
-                "stickers": ["💻", "🖥️", "⌨️", "🖱️", "💾", "🔌", "📱", "🌐", "🤖", "💿"],
-                "animation_emojis": "💻🖥️⌨️🖱️💾🔌📱🌐🤖💿⚡✨",
-                "funny_comments": [
-                    "Код работает! Баги побеждены! 🐛❌",
-                    "Алгоритм оптимизирован! Процессор ликует! 🔥",
-                    "Hello World! Программирование покорено! 👋",
-                    "Сеть настроена! Интернет подключен! 🌐"
-                ],
-                "topic_stickers": {
-                    "Программирование": "💻⌨️",
-                    "Алгоритмы": "🤖🔢",
-                    "Сети": "🌐🔌"
-                }
-            }
-        }
-    
-    def init_testing_session(self):
-        """Инициализация сессии для тестирования"""
-        try:
-            # TODO: Адаптировать для Flask
-            session = flask_session
-            if 'testing_state' not in session:
-                session['testing_state'] = {
-                    'current_page': 'subjects',  # subjects, sections, topics, difficulty, test, results
-                    'selected_subject': None,
-                    'selected_section': None, 
-                    'selected_topic': None,
-                    'selected_difficulty': None,
-                    'current_test': None,
-                    'user_answers': {},
-                    'test_results': None,
-                    'current_question': 0
-                }
-        except Exception as e:
-            # Если session_state недоступен, просто игнорируем ошибку
-            # Инициализация будет выполнена позже, когда session_state станет доступен
-            print(f"Предупреждение: не удалось инициализировать сессию тестирования: {e}")
-    
-    def play_sound_effect(self, sound_type, subject=None):
-        """Воспроизведение звуковых эффектов"""
-        try:
-            # Звуковые эффекты через HTML audio с веб-звуками
-            sound_urls = {
-                'start_test': 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LLfSgEs3k=',
-                'correct_answer': 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LLfSgEs3k=',
-                'wrong_answer': 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LLfSgEs3k=',
-                'excellent_result': 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LLfSgEs3k=',
-                'good_result': 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LLfSgEs3k=',
-                'try_again': 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LLfSgEs3k='
-            }
-            
-            # Предметные звуки (забавные описания)
-            subject_sounds = {
-                'Алгебра': ['🔢 *звук калькулятора*', '➕ *щелчок счетов*'],
-                'Геометрия': ['📐 *скрип циркуля*', '📏 *стук линейки*'],
-                'Физика': ['⚡ *треск электричества*', '🔬 *булькание в пробирке*'],
-                'Химия': ['🧪 *шипение реакции*', '💥 *небольшой взрыв*'],
-                'Биология': ['🧬 *шуршание листьев*', '🐛 *жужжание насекомых*'],
-                'География': ['🌍 *шум океана*', '🏔️ *эхо в горах*'],
-                'История': ['⚔️ *звон мечей*', '📜 *шуршание пергамента*'],
-                'Обществознание': ['🏛️ *гул парламента*', '💰 *звон монет*'],
-                'Русский язык': ['📝 *скрип пера*', '📚 *шелест страниц*'],
-                'Английский язык': ['🇬🇧 *Big Ben*', '☕ *чаепитие*'],
-                'Информатика': ['⌨️ *стук клавиш*', '💾 *писк модема*']
-            }
-            
-            # TODO: UI теперь в Flask шаблонах - звуковые эффекты реализуются через JavaScript
-            # Отображаем звуковой эффект как текст (поскольку реальные звуки требуют аудиофайлы)
-            # if sound_type in ['start_test', 'excellent_result', 'good_result']:
-            #     st.info("🎵 *воспроизводится торжественная мелодия* 🎶")
-            # elif sound_type == 'correct_answer':
-            #     st.success("🎉 *звон успеха* ✨")
-            # elif sound_type == 'wrong_answer':
-            #     st.info("🤔 *мягкий звук 'упс'* 💭")
-            # elif sound_type == 'try_again':
-            #     st.info("🚀 *звук старта* 💫")
-            
-            # Добавляем предметный звук
-            # if subject and subject in subject_sounds:
-            #     subject_sound = random.choice(subject_sounds[subject])
-            #     st.caption(f"🎧 {subject_sound}")
-            
-        except Exception as e:
-            print(f"Ошибка воспроизведения звука: {e}")
-    
-    def show_subject_stickers(self, subject, topic=None):
-        """Показать тематические стикеры для предмета"""
-        try:
-            if subject not in self.SUBJECT_STICKERS:
-                return
-            
-            subject_data = self.SUBJECT_STICKERS[subject]
-            
-            # Большие стикеры предмета
-            stickers = subject_data['stickers']
-            selected_stickers = random.sample(stickers, min(5, len(stickers)))
-            
-            # TODO: UI теперь в Flask шаблонах - стикеры отображаются в шаблонах
-            # Отображаем стикеры
-            # st.markdown(f"### {''.join(selected_stickers)}")
-            
-            # Специальные стикеры для конкретной темы
-            # if topic and topic in subject_data.get('topic_stickers', {}):
-            #     topic_stickers = subject_data['topic_stickers'][topic]
-            #     st.markdown(f"#### {topic_stickers} {topic} {topic_stickers}")
-            
-            # Возвращаем данные для Flask шаблона
-            return {
-                'stickers': selected_stickers,
-                'topic_stickers': subject_data.get('topic_stickers', {}).get(topic) if topic else None
-            }
-            
-        except Exception as e:
-            print(f"Ошибка отображения стикеров: {e}")
-    
-    def show_animated_celebration(self, subject, grade_percentage):
-        """Показать анимированное празднование с тематическими элементами"""
-        try:
-            if subject not in self.SUBJECT_STICKERS:
-                return
-            
-            subject_data = self.SUBJECT_STICKERS[subject]
-            
-            # TODO: UI теперь в Flask шаблонах - анимации реализуются через JavaScript
-            # Анимированные эмодзи
-            animation_emojis = subject_data['animation_emojis']
-            # st.markdown(f"## {animation_emojis}")
-            
-            # Тематические комментарии
-            funny_comments = subject_data['funny_comments']
-            selected_comment = random.choice(funny_comments)
-            
-            # Возвращаем данные для Flask шаблона
-            celebration_data = {
-                'animation_emojis': animation_emojis,
-                'comment': selected_comment,
-                'grade_percentage': grade_percentage
-            }
-            
-            # Специальные анимации в зависимости от результата
-            if grade_percentage >= 90:
-                celebration_data['type'] = 'excellent'
-                celebration_data['stickers'] = {
-                    'Алгебра': '🏆➕➖✖️➗🧮💯🎯',
-                    'Физика': '⚡🚀🌟💫🔥⚛️🏆',
-                    'Химия': '🧪⚗️💎🔬🏆✨💫',
-                    'Биология': '🧬🌱🦋🌸🏆🌺✨',
-                    'География': '🌍🗺️🏔️🌊🏆⭐✨',
-                    'История': '👑⚔️🏛️📜🏆✨💫',
-                    'Информатика': '💻🤖⚡🏆💫✨🚀'
-                }.get(subject, '🏆🎉🌟💫✨🎊🎯')
-            elif grade_percentage >= 70:
-                celebration_data['type'] = 'good'
-                celebration_data['stickers'] = {
-                    'Алгебра': '🔢➕📊📈👍',
-                    'Физика': '⚡🔬💡🌟👍'
-                }.get(subject, '🌟👍💪📚✨')
-            elif grade_percentage >= 50:
-                celebration_data['type'] = 'average'
-                celebration_data['stickers'] = '🌱💪📚🎯🚀'
-            else:
-                celebration_data['type'] = 'low'
-                celebration_data['stickers'] = '💪🌟📚🚀💡🌱'
-            
-            return celebration_data
-            
-        except Exception as e:
-            print(f"Ошибка анимации: {e}")
-    
-    def get_funny_subject_comment(self, subject, context='general'):
-        """Получить смешной комментарий для предмета"""
-        try:
-            if subject not in self.SUBJECT_STICKERS:
-                return "Отлично! Продолжайте в том же духе! 🎉"
-            
-            funny_comments = self.SUBJECT_STICKERS[subject]['funny_comments']
-            return random.choice(funny_comments)
-            
-        except Exception as e:
-            print(f"Ошибка получения комментария: {e}")
-            return "Замечательно! 🌟"
-    
-    def show_testing_interface(self):
-        """Главный интерфейс тестирования - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
-        # TODO: UI теперь в Flask шаблонах (templates/dashboard/testing.html)
-        # Этот метод возвращает данные для шаблона вместо отображения UI
-        try:
-            self.init_testing_session()
-            session = flask_session
-            state = session.get('testing_state', {})
-            return {
-                'current_page': state.get('current_page', 'subjects'),
-                'selected_subject': state.get('selected_subject'),
-                'selected_section': state.get('selected_section'),
-                'selected_topic': state.get('selected_topic'),
-                'selected_difficulty': state.get('selected_difficulty'),
-                'subjects': self.SUBJECTS_STRUCTURE
-            }
-        except Exception as e:
-            print(f"Ошибка в интерфейсе тестирования: {e}")
-            return {'error': str(e)}
-    
-    def show_navigation(self):
-        """Показать навигационные кнопки"""
-        try:
-            # Инициализация сессии тестирования (если еще не инициализировано)
-            self.init_testing_session()
-            
-            state = flask_session.get('testing_state', {})
-            
-            # Хлебные крошки
-            breadcrumbs = []
-            if state['current_page'] != 'subjects':
-                breadcrumbs.append("Предметы")
-            if state['selected_subject'] and state['current_page'] not in ['subjects', 'sections']:
-                breadcrumbs.append(state['selected_subject'])
-            if state['selected_section'] and state['current_page'] not in ['subjects', 'sections', 'topics']:
-                breadcrumbs.append(state['selected_section'])
-            if state['selected_topic'] and state['current_page'] not in ['subjects', 'sections', 'topics', 'difficulty']:
-                breadcrumbs.append(state['selected_topic'])
-            if state['selected_difficulty'] and state['current_page'] in ['test', 'results']:
-                breadcrumbs.append(f"Уровень: {state['selected_difficulty']}")
-            
-            # TODO: UI теперь в Flask шаблонах
-            # if breadcrumbs:
-            #     st.markdown(" → ".join(breadcrumbs))
-            #     st.markdown("---")
-            
-            # Кнопка "Назад"
-            # if state['current_page'] not in ['subjects', 'test']:
-            #     if st.button("⬅️ Назад", key="testing_back_button"):
-            #         self.navigate_back()
-            #         st.rerun()
-            
-            # Возвращаем данные для Flask шаблона
-            return {'breadcrumbs': breadcrumbs, 'state': state}
-            
-        except Exception as e:
-            print(f"Ошибка навигации: {e}")
-            return {'error': str(e)}
     
     def navigate_back(self):
         """Навигация назад"""
-        try:
-            # Инициализация сессии тестирования (если еще не инициализировано)
-            self.init_testing_session()
-            
-            state = flask_session.get('testing_state', {})
-            
-            if state['current_page'] == 'results':
-                state['current_page'] = 'difficulty'
-                state['test_results'] = None
-                state['user_answers'] = {}
-                state['current_test'] = None
-            elif state['current_page'] == 'difficulty':
-                state['current_page'] = 'topics'
-                state['selected_difficulty'] = None
-            elif state['current_page'] == 'topics':
-                state['current_page'] = 'sections'
-                state['selected_topic'] = None
-            elif state['current_page'] == 'sections':
-                state['current_page'] = 'subjects'
-                state['selected_section'] = None
-            
-        except Exception as e:
-            print(f"Ошибка навигации назад: {e}")
+        self.init_session()
+        state = flask_session.get('testing_state', {})
+        
+        nav_map = {
+            'results': ('difficulty', {'test_results': None, 'user_answers': {}, 'current_test': None}),
+            'difficulty': ('topics', {'selected_difficulty': None}),
+            'topics': ('sections', {'selected_topic': None}),
+            'sections': ('subjects', {'selected_section': None})
+        }
+        
+        if state['current_page'] in nav_map:
+            new_page, updates = nav_map[state['current_page']]
+            state['current_page'] = new_page
+            state.update(updates)
     
-    def show_subjects(self):
-        """Показать список предметов"""
-        try:
-            # Инициализация сессии тестирования (если еще не инициализировано)
-            self.init_testing_session()
-            
-            # TODO: UI теперь в Flask шаблонах
-            subjects = list(self.SUBJECTS_STRUCTURE.keys())
-            
-            # Возвращаем данные для Flask шаблона
-            return {
-                'subjects': subjects,
-                'subjects_structure': self.SUBJECTS_STRUCTURE
-            }
-            
-        except Exception as e:
-            print(f"Ошибка отображения предметов: {e}")
-            return {'error': str(e)}
+    def show_subjects(self) -> Dict[str, Any]:
+        """Список предметов"""
+        self.init_session()
+        return {'subjects': list(self.SUBJECTS_STRUCTURE.keys()), 'subjects_structure': self.SUBJECTS_STRUCTURE}
     
-    def show_sections(self):
-        """Показать разделы выбранного предмета"""
-        try:
-            # Инициализация сессии тестирования (если еще не инициализировано)
-            self.init_testing_session()
-            
+    def show_sections(self, subject: str = None) -> Dict[str, Any]:
+        """Разделы предмета"""
+        if not subject:
+            self.init_session()
             subject = flask_session.get('testing_state', {}).get('selected_subject')
-            if not subject:
-                flask_session['testing_state']['current_page'] = 'subjects'
-                return {'error': 'Предмет не выбран'}
-            
-            icon = self.SUBJECTS_STRUCTURE[subject]["icon"]
-            sections = self.SUBJECTS_STRUCTURE[subject]["sections"]
-            
-            # Возвращаем данные для Flask шаблона
-            return {
-                'subject': subject,
-                'icon': icon,
-                'sections': sections
-            }
-            
-        except Exception as e:
-            print(f"Ошибка отображения разделов: {e}")
-            return {'error': str(e)}
+        
+        if not subject or subject not in self.SUBJECTS_STRUCTURE:
+            return {'error': f'Предмет "{subject}" не найден'}
+        
+        return {
+            'subject': subject,
+            'icon': self.SUBJECTS_STRUCTURE[subject]["icon"],
+            'sections': self.SUBJECTS_STRUCTURE[subject]["sections"]
+        }
     
-    def show_topics(self):
-        """Показать темы выбранного раздела"""
-        try:
-            # Инициализация сессии тестирования (если еще не инициализировано)
-            self.init_testing_session()
-            
-            subject = flask_session.get('testing_state', {}).get('selected_subject')
-            section = flask_session.get('testing_state', {}).get('selected_section')
-            
-            if not subject or not section:
-                flask_session['testing_state']['current_page'] = 'subjects'
-                return {'error': 'Предмет или раздел не выбран'}
-            
-            icon = self.SUBJECTS_STRUCTURE[subject]["icon"]
-            topics = self.SUBJECTS_STRUCTURE[subject]["sections"][section]["topics"]
-            
-            # Возвращаем данные для Flask шаблона
-            return {
-                'subject': subject,
-                'section': section,
-                'icon': icon,
-                'topics': topics
-            }
-            
-        except Exception as e:
-            print(f"Ошибка отображения тем: {e}")
-            return {'error': str(e)}
-    
-    def show_difficulty_selection(self):
-        """Показать выбор уровня сложности"""
-        try:
-            # Инициализация сессии тестирования (если еще не инициализировано)
-            self.init_testing_session()
-            
-            subject = flask_session.get('testing_state', {}).get('selected_subject')
-            section = flask_session.get('testing_state', {}).get('selected_section')
-            topic = flask_session.get('testing_state', {}).get('selected_topic')
-            
-            if not all([subject, section, topic]):
-                flask_session['testing_state']['current_page'] = 'subjects'
-                return {'error': 'Не все параметры выбраны'}
-            
-            icon = self.SUBJECTS_STRUCTURE[subject]["icon"]
-            
-            # TODO: UI теперь в Flask шаблонах
-            # Возвращаем данные для Flask шаблона
-            return {
-                'subject': subject,
-                'section': section,
-                'topic': topic,
-                'icon': icon,
-                'difficulty_levels': self.DIFFICULTY_LEVELS
-            }
-            
-        except Exception as e:
-            print(f"Ошибка выбора сложности: {e}")
-            return {'error': str(e)}
-    
-    def show_test(self):
-        """Показать тест"""
-        try:
-            # Инициализация сессии тестирования (если еще не инициализировано)
-            self.init_testing_session()
-            
+    def show_topics(self, subject: str = None, section: str = None) -> Dict[str, Any]:
+        """Темы раздела"""
+        if not subject or not section:
+            self.init_session()
             state = flask_session.get('testing_state', {})
-            
-            if not all([state['selected_subject'], state['selected_section'], 
-                       state['selected_topic'], state['selected_difficulty']]):
-                state['current_page'] = 'subjects'
-                return {'error': 'Не все параметры выбраны'}
-            
-            # Генерируем тест если его еще нет
-            if not state['current_test']:
-                # Позитивные сообщения при генерации
-                motivational_messages = [
-                    "🎯 Готовлю для вас увлекательные вопросы!",
-                    "🧠 Создаю интересные задания!",
-                    "✨ Почти готово! Сейчас будет весело!",
-                    "🎪 Подготавливаю захватывающий тест!",
-                    "🚀 Запускаю генератор знаний!"
-                ]
-                selected_message = random.choice(motivational_messages)
-                
-                # TODO: UI теперь в Flask шаблонах - спиннер реализуется через JavaScript
-                # with st.spinner(selected_message):
-                test = self.generate_test(
-                    state['selected_subject'],
-                    state['selected_section'], 
-                    state['selected_topic'],
-                    state['selected_difficulty']
-                )
-                state['current_test'] = test
-                state['user_answers'] = {}
-                state['current_question'] = 0
-                
-                # Позитивное сообщение после генерации
-                # st.success("🎉 Отлично! Тест готов к прохождению!")
-                # st.info("💡 Совет: внимательно читайте вопросы и не торопитесь с ответами!")
-            
-            if not state['current_test']:
-                return {'error': 'Не удалось сгенерировать тест. Попробуйте позже.'}
-            
-            # TODO: UI теперь в Flask шаблонах
-            return self.display_test()
-            
-        except Exception as e:
-            print(f"Ошибка отображения теста: {e}")
-            return {'error': str(e)}
+            subject = subject or state.get('selected_subject')
+            section = section or state.get('selected_section')
+        
+        if not subject or not section:
+            return {'error': 'Предмет или раздел не выбран'}
+        if subject not in self.SUBJECTS_STRUCTURE:
+            return {'error': f'Предмет "{subject}" не найден'}
+        if section not in self.SUBJECTS_STRUCTURE[subject]["sections"]:
+            return {'error': f'Раздел "{section}" не найден'}
+        
+        return {
+            'subject': subject, 'section': section,
+            'icon': self.SUBJECTS_STRUCTURE[subject]["icon"],
+            'topics': self.SUBJECTS_STRUCTURE[subject]["sections"][section]["topics"]
+        }
     
-    def display_test(self):
-        """Отображение теста - ТРЕБУЕТ АДАПТАЦИИ ДЛЯ FLASK"""
-        # TODO: UI теперь в Flask шаблонах
-        try:
-            self.init_testing_session()
-            state = flask_session.get('testing_state', {})
-            test = state.get('current_test')
-            
-            if not test:
-                return {'error': 'Тест не сгенерирован'}
-            
-            icon = self.SUBJECTS_STRUCTURE[state['selected_subject']]["icon"]
-            difficulty_icon = self.DIFFICULTY_LEVELS[state['selected_difficulty']]["icon"]
-            
-            # Прогресс
-            progress = len(state.get('user_answers', {})) / len(test['questions'])
-            answered_count = len(state.get('user_answers', {}))
-            total_count = len(test['questions'])
-            
-            # Мотивирующие сообщения в зависимости от прогресса
-            if progress == 0:
-                progress_message = "🌟 Начинаем! Вы справитесь!"
-            elif progress < 0.3:
-                progress_message = "💪 Отличное начало! Продолжайте!"
-            elif progress < 0.6:
-                progress_message = "🔥 Вы на правильном пути!"
-            elif progress < 0.9:
-                progress_message = "⚡ Почти финиш! Так держать!"
-            else:
-                progress_message = "🏆 Последний рывок! Вы молодец!"
-            
-            all_answered = len(state.get('user_answers', {})) == len(test['questions'])
-            
-            # Возвращаем данные для Flask шаблона
-            return {
-                'test': test,
-                'icon': icon,
-                'difficulty_icon': difficulty_icon,
-                'progress': progress,
-                'progress_message': progress_message,
-                'answered_count': answered_count,
-                'total_count': total_count,
-                'all_answered': all_answered,
-                'user_answers': state.get('user_answers', {})
-            }
-            
-            # TODO: UI теперь в Flask шаблонах - кнопки реализуются в шаблонах
-            # funny_comment = self.get_funny_subject_comment(state['selected_subject'])
-            # st.success(f"🚀 {funny_comment} Готовим новые вопросы!")
-            # st.rerun()
-            
-            # with col2:
-            #     if st.button("🎯 Другая тема", key="different_topic_button"):
-            #         state['current_test'] = None
-            #         state['user_answers'] = {}
-            #         state['current_page'] = 'topics'
-            #         
-            #         # Звук перехода
-            #         self.play_sound_effect('try_again', state['selected_subject'])
-            #         st.info("🌟 Переходим к выбору новой темы!")
-            #         
-            #         st.rerun()
-            
-        except Exception as e:
-            print(f"Ошибка отображения теста: {e}")
-            return {'error': str(e)}
+    def show_difficulty_selection(self) -> Dict[str, Any]:
+        """Выбор сложности"""
+        self.init_session()
+        state = flask_session.get('testing_state', {})
+        subject = state.get('selected_subject')
+        
+        if not all([subject, state.get('selected_section'), state.get('selected_topic')]):
+            state['current_page'] = 'subjects'
+            return {'error': 'Не все параметры выбраны'}
+        
+        return {
+            'subject': subject,
+            'section': state.get('selected_section'),
+            'topic': state.get('selected_topic'),
+            'icon': self.SUBJECTS_STRUCTURE[subject]["icon"],
+            'difficulty_levels': DIFFICULTY_LEVELS
+        }
     
-    def generate_test(self, subject, section, topic, difficulty):
+    def generate_test(self, subject: str, section: str, topic: str, difficulty: str) -> Optional[Dict[str, Any]]:
         """Генерация теста"""
         try:
-            # Для математики используем комбинированный подход: математический генератор + LLM
-            if subject == "Алгебра" or subject == "Математика":
-                return self.generate_math_test(subject, section, topic, difficulty)
+            print(f"Генерация теста: {subject} -> {section} -> {topic} [{difficulty}]")
             
-            # Для других предметов: LLM или локальные тесты
-            if self.ollama_client is not None:
-                return self.generate_ollama_test(subject, section, topic, difficulty)
-            elif self.api_key:
-                return self.generate_openai_test(subject, section, topic, difficulty)
-            else:
-                return self.generate_local_test(subject, section, topic, difficulty)
+            # Математика - используем DLL генератор
+            if subject in ["Алгебра", "Математика"] and self.math_generator:
+                return self._generate_math_test(topic, difficulty)
+            
+            # Другие предметы - LLM или локальные
+            if self.ollama_client:
+                return self._generate_llm_test(subject, section, topic, difficulty)
+            
+            return self._generate_local_test(subject, section, topic, difficulty)
         except Exception as e:
             print(f"Ошибка генерации теста: {e}")
-            return self.generate_local_test(subject, section, topic, difficulty)
+            return self._generate_local_test(subject, section, topic, difficulty)
     
-    def generate_ollama_test(self, subject, section, topic, difficulty):
-        """Генерация теста через локальную LLM (Ollama)"""
+    def _generate_math_test(self, topic: str, difficulty: str) -> Dict[str, Any]:
+        """Тест по математике через DLL генератор"""
+        questions = []
+        
+        if self.math_generator and self.math_generator.is_topic_supported(topic):
+            for _ in range(NUM_QUESTIONS):
+                problem = self.math_generator.generate_problem_by_topic(topic, difficulty)
+                if problem:
+                    options = self._generate_options(problem['correct_answer'])
+                    questions.append({
+                        "question": problem['question'],
+                        "options": options,
+                        "correct_answer": problem['correct_answer']
+                    })
+        
+        # Дополняем LLM или локальными вопросами
+        while len(questions) < NUM_QUESTIONS:
+            local = self._get_local_math_question(topic)
+            if local:
+                questions.append(local)
+            else:
+                break
+        
+        return {"questions": questions[:NUM_QUESTIONS]}
+    
+    def _generate_options(self, correct: str) -> List[str]:
+        """Генерация вариантов ответов"""
+        import re
+        options = [correct]
+        numbers = re.findall(r'-?\d+\.?\d*', correct)
+        
+        if numbers:
+            base = float(numbers[0])
+            variants = [base + random.randint(1, 3), base - random.randint(1, 3),
+                       base * 2 if abs(base) < 10 else base + 5]
+            
+            for v in variants:
+                v_str = str(int(v)) if v == int(v) else str(round(v, 2))
+                new_opt = correct.replace(str(numbers[0]), v_str)
+                if new_opt not in options:
+                    options.append(new_opt)
+        
+        while len(options) < 4:
+            options.append(f"x = {random.randint(-10, 10)}")
+        
+        random.shuffle(options)
+        return options[:4]
+    
+    def _generate_llm_test(self, subject: str, section: str, topic: str, difficulty: str) -> Optional[Dict]:
+        """Генерация через LLM"""
         try:
-            if self.ollama_client is None:
-                return self.generate_local_test(subject, section, topic, difficulty)
+            diff_info = DIFFICULTY_LEVELS.get(difficulty, DIFFICULTY_LEVELS["Средний"])
             
-            difficulty_info = self.DIFFICULTY_LEVELS[difficulty]
-            
-            system_prompt = f"""Ты опытный преподаватель {subject.lower()}а. 
-Создай тест из 5 вопросов по теме "{topic}" из раздела "{section}".
+            prompt = f"""Ты преподаватель {subject.lower()}а. Создай {NUM_QUESTIONS} вопросов по теме "{topic}" ({section}).
+Сложность: {difficulty} ({diff_info['style']}).
 
-Требования:
-1. Уровень сложности: {difficulty} ({difficulty_info['questions_style']})
-2. Каждый вопрос должен иметь 4 варианта ответа (A, B, C, D)
-3. Только один правильный ответ
-4. Вопросы должны проверять понимание темы
-5. Ответь СТРОГО в формате JSON без дополнительного текста:
-
-{{
-    "questions": [
-        {{
-            "question": "Текст вопроса",
-            "options": ["Вариант A", "Вариант B", "Вариант C", "Вариант D"],
-            "correct_answer": "Вариант A"
-        }}
-    ]
-}}
-
-Вопросы должны быть на русском языке."""
-            
-            user_prompt = f"Создай тест уровня '{difficulty}' по теме '{topic}' из раздела '{section}' предмета '{subject}'"
-            
-            # Формируем полный промпт
-            full_prompt = f"{system_prompt}\n\n{user_prompt}"
-            
-            # Получаем ответ от модели
-            response_text = self.ollama_client.invoke(full_prompt)
-            
-            if not response_text:
-                return self.generate_local_test(subject, section, topic, difficulty)
-            
-            # Очищаем ответ от возможных префиксов и markdown
-            response_text = response_text.strip()
-            
-            # Удаляем markdown код блоки если есть
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0].strip()
-            
-            # Парсим JSON ответ
-            try:
-                test_data = json.loads(response_text)
-                # Проверяем структуру
-                if "questions" not in test_data or not isinstance(test_data["questions"], list):
-                    raise ValueError("Неверная структура JSON")
-                return test_data
-            except (json.JSONDecodeError, ValueError) as e:
-                print(f"Ошибка парсинга JSON от Ollama: {e}")
-                print(f"Ответ модели: {response_text[:200]}...")
-                return self.generate_local_test(subject, section, topic, difficulty)
-            
-        except Exception as e:
-            print(f"Ошибка Ollama API для тестов: {e}")
-            return self.generate_local_test(subject, section, topic, difficulty)
-    
-    def generate_openai_test(self, subject, section, topic, difficulty):
-        """Генерация теста через OpenAI"""
-        try:
-            import openai
-            
-            openai.api_key = self.api_key
-            
-            difficulty_info = self.DIFFICULTY_LEVELS[difficulty]
-            
-            system_prompt = f"""Ты опытный преподаватель {subject.lower()}а. 
-            Создай тест из 5 вопросов по теме "{topic}" из раздела "{section}".
-            
-            Требования:
-            1. Уровень сложности: {difficulty} ({difficulty_info['questions_style']})
-            2. Каждый вопрос должен иметь 4 варианта ответа (A, B, C, D)
-            3. Только один правильный ответ
-            4. Вопросы должны проверять понимание темы
-            5. Ответь СТРОГО в формате JSON без дополнительного текста:
-            
-            {{
-                "questions": [
-                    {{
-                        "question": "Текст вопроса",
-                        "options": ["Вариант A", "Вариант B", "Вариант C", "Вариант D"],
-                        "correct_answer": "Вариант A"
-                    }}
-                ]
-            }}
-            
-            Вопросы должны быть на русском языке."""
-            
-            user_prompt = f"Создай тест уровня '{difficulty}' по теме '{topic}' из раздела '{section}' предмета '{subject}'"
-            
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=2000,
-                temperature=0.7
-            )
-            
-            # Парсим JSON ответ
-            test_json = response.choices[0].message.content
-            test_data = json.loads(test_json)
-            
-            return test_data
-            
-        except ImportError:
-            return self.generate_local_test(subject, section, topic, difficulty)
-        except json.JSONDecodeError:
-            print("Ошибка парсинга JSON от OpenAI")
-            return self.generate_local_test(subject, section, topic, difficulty)
-        except Exception as e:
-            print(f"Ошибка OpenAI API: {e}")
-            return self.generate_local_test(subject, section, topic, difficulty)
-    
-    def generate_math_test(self, subject, section, topic, difficulty):
-        """Генерация теста по математике с использованием математического генератора и LLM"""
-        try:
-            questions = []
-            
-            # Определяем уровень сложности для математического генератора
-            difficulty_map = {"Лёгкий": 1, "Средний": 2, "Хардкор": 3}
-            math_difficulty = difficulty_map.get(difficulty, 2)
-            
-            # Используем математический генератор для задач по уравнениям
-            if topic in ["Линейные уравнения", "Квадратные уравнения", "Неравенства"]:
-                try:
-                    from cffi import FFI
-                    from pathlib import Path
-                    
-                    math_gen_path = Path(__file__).parent.parent / "math_generator"
-                    dll_path = math_gen_path / "algebra.dll"
-                    header_path = math_gen_path / "algebra.h"
-                    
-                    if dll_path.exists() and header_path.exists():
-                        ffi = FFI()
-                        with open(header_path, "r") as header:
-                            ffi.cdef(header.read())
-                        library = ffi.dlopen(str(dll_path))
-                        
-                        # Генерируем 2-3 задачи через математический генератор
-                        num_math_questions = 3 if difficulty == "Лёгкий" else 2
-                        
-                        for i in range(num_math_questions):
-                            try:
-                                if topic == "Линейные уравнения":
-                                    problem = library.equation_linear(math_difficulty)
-                                elif topic == "Квадратные уравнения":
-                                    problem = library.equation_quadratic(math_difficulty)
-                                elif topic == "Неравенства":
-                                    problem = library.inequality_linear(math_difficulty) if i % 2 == 0 else library.inequality_quadratic(math_difficulty)
-                                else:
-                                    problem = library.equation_linear(math_difficulty)
-                                
-                                problem_text = ffi.string(problem).decode('utf-8')
-                                library.free_string(problem)
-                                
-                                # Генерируем варианты ответов через LLM
-                                if self.ollama_client:
-                                    options = self._generate_math_options(problem_text, topic)
-                                else:
-                                    options = self._generate_math_options_local(problem_text, topic)
-                                
-                                questions.append({
-                                    "question": f"Решите задачу: {problem_text}",
-                                    "options": options["options"],
-                                    "correct_answer": options["correct_answer"]
-                                })
-                            except Exception as e:
-                                print(f"Ошибка генерации задачи: {e}")
-                                continue
-                        
-                        # Остальные вопросы через LLM
-                        remaining = 5 - len(questions)
-                        if remaining > 0 and self.ollama_client:
-                            llm_q = self._generate_math_llm_questions(subject, section, topic, difficulty, remaining)
-                            questions.extend(llm_q)
-                        
-                        # Дополняем локальными вопросами если нужно
-                        while len(questions) < 5:
-                            local_q = self._get_local_math_question(topic)
-                            if local_q:
-                                questions.append(local_q)
-                            else:
-                                break
-                        
-                        return {"questions": questions[:5]}
-                except (ImportError, Exception) as e:
-                    print(f"Ошибка математического генератора: {e}")
-            
-            # Если генератор не подходит, используем LLM
-            if self.ollama_client:
-                return self.generate_ollama_test(subject, section, topic, difficulty)
-            return self.generate_local_test(subject, section, topic, difficulty)
-        except Exception as e:
-            print(f"Ошибка генерации математического теста: {e}")
-            return self.generate_local_test(subject, section, topic, difficulty)
-    
-    def _generate_math_options(self, problem_text, topic):
-        """Генерация вариантов ответов через LLM"""
-        try:
-            prompt = f"""Для задачи "{problem_text}" по теме "{topic}" создай 4 варианта ответа в формате JSON:
-{{"options": ["Вариант 1", "Вариант 2", "Вариант 3", "Вариант 4"], "correct_answer": "Правильный ответ"}}
-Только один вариант правильный. Ответь СТРОГО в формате JSON без дополнительного текста."""
-            
-            response = self.ollama_client.invoke(prompt).strip()
-            if "```json" in response:
-                response = response.split("```json")[1].split("```")[0].strip()
-            elif "```" in response:
-                response = response.split("```")[1].split("```")[0].strip()
-            return json.loads(response)
-        except Exception as e:
-            print(f"Ошибка генерации вариантов: {e}")
-            return {"options": ["x = 1", "x = 2", "x = 3", "x = 4"], "correct_answer": "x = 2"}
-    
-    def _generate_math_options_local(self, problem_text, topic):
-        """Локальная генерация вариантов (заглушка)"""
-        return {"options": ["x = 1", "x = 2", "x = 3", "x = 4"], "correct_answer": "x = 2"}
-    
-    def _generate_math_llm_questions(self, subject, section, topic, difficulty, count):
-        """Генерация вопросов через LLM"""
-        try:
-            diff_info = self.DIFFICULTY_LEVELS[difficulty]
-            prompt = f"""Ты преподаватель математики. Создай {count} вопросов по теме "{topic}" уровня {difficulty}.
-Каждый вопрос: 4 варианта ответа (A, B, C, D), только один правильный. Формат JSON:
+Ответь СТРОГО в JSON:
 {{"questions": [{{"question": "Текст", "options": ["A", "B", "C", "D"], "correct_answer": "A"}}]}}
-Ответь СТРОГО в формате JSON."""
+
+Вопросы на русском. Только JSON."""
             
             response = self.ollama_client.invoke(prompt).strip()
+            
+            # Очистка markdown
             if "```json" in response:
                 response = response.split("```json")[1].split("```")[0].strip()
             elif "```" in response:
                 response = response.split("```")[1].split("```")[0].strip()
+            
             data = json.loads(response)
-            return data.get("questions", [])[:count]
+            if "questions" in data:
+                return data
         except Exception as e:
-            print(f"Ошибка LLM вопросов: {e}")
-            return []
+            print(f"Ошибка LLM: {e}")
+        
+        return self._generate_local_test(subject, section, topic, difficulty)
     
-    def _get_local_math_question(self, topic):
-        """Локальный вопрос по математике"""
-        local = {
+    def _get_local_math_question(self, topic: str) -> Optional[Dict]:
+        """Локальные математические вопросы"""
+        questions = {
             "Линейные уравнения": [
                 {"question": "Решите: 2x + 5 = 11", "options": ["x = 3", "x = 8", "x = -3", "x = 16"], "correct_answer": "x = 3"},
                 {"question": "Решите: x/2 = 6", "options": ["x = 3", "x = 12", "x = 8", "x = 4"], "correct_answer": "x = 12"}
+            ],
+            "Квадратные уравнения": [
+                {"question": "Решите: x² - 4 = 0", "options": ["x = ±2", "x = 4", "x = -4", "x = 2"], "correct_answer": "x = ±2"},
+                {"question": "Дискриминант x² - 5x + 6 = 0:", "options": ["1", "25", "6", "-11"], "correct_answer": "1"}
             ]
         }
-        if topic in local:
-            return random.choice(local[topic])
-        return None
+        return random.choice(questions.get(topic, [])) if topic in questions else None
     
-    def generate_local_test(self, subject, section, topic, difficulty):
-        """Локальная генерация теста"""
-        
-        # Базовые тесты для демонстрации
-        sample_tests = {
-            "Линейные уравнения": {
-                "questions": [
-                    {
-                        "question": "Решите уравнение: 2x + 5 = 11",
-                        "options": ["x = 3", "x = 8", "x = -3", "x = 16"],
-                        "correct_answer": "x = 3"
-                    },
-                    {
-                        "question": "Какой коэффициент при x в уравнении 3x - 7 = 0?",
-                        "options": ["3", "-7", "0", "10"],
-                        "correct_answer": "3"
-                    },
-                    {
-                        "question": "Сколько решений имеет уравнение 0x + 5 = 5?",
-                        "options": ["Одно", "Два", "Бесконечно много", "Ни одного"],
-                        "correct_answer": "Бесконечно много"
-                    },
-                    {
-                        "question": "Решите уравнение: x/2 = 6",
-                        "options": ["x = 3", "x = 12", "x = 8", "x = 4"],
-                        "correct_answer": "x = 12"
-                    },
-                    {
-                        "question": "В уравнении ax + b = 0, чему равен x при a ≠ 0?",
-                        "options": ["x = -b/a", "x = b/a", "x = a/b", "x = -a/b"],
-                        "correct_answer": "x = -b/a"
-                    }
-                ]
-            },
-            "Треугольники": {
-                "questions": [
-                    {
-                        "question": "Чему равна сумма углов треугольника?",
-                        "options": ["90°", "180°", "270°", "360°"],
-                        "correct_answer": "180°"
-                    },
-                    {
-                        "question": "Как называется треугольник с тремя равными сторонами?",
-                        "options": ["Равнобедренный", "Прямоугольный", "Равносторонний", "Тупоугольный"],
-                        "correct_answer": "Равносторонний"
-                    },
-                    {
-                        "question": "По какой формуле вычисляется площадь треугольника?",
-                        "options": ["S = a×h", "S = (1/2)×a×h", "S = a²", "S = 2×a×h"],
-                        "correct_answer": "S = (1/2)×a×h"
-                    },
-                    {
-                        "question": "Какое неравенство выполняется для сторон треугольника?",
-                        "options": ["a + b = c", "a + b < c", "a + b > c", "a = b = c"],
-                        "correct_answer": "a + b > c"
-                    },
-                    {
-                        "question": "Как называется треугольник с углом 90°?",
-                        "options": ["Острый", "Тупой", "Прямоугольный", "Равнобедренный"],
-                        "correct_answer": "Прямоугольный"
-                    }
-                ]
-            }
+    def _generate_local_test(self, subject: str, section: str, topic: str, difficulty: str) -> Dict:
+        """Локальная генерация теста (fallback)"""
+        local_tests = {
+            "Линейные уравнения": [
+                {"question": "Решите: 2x + 5 = 11", "options": ["x = 3", "x = 8", "x = -3", "x = 16"], "correct_answer": "x = 3"},
+                {"question": "Коэффициент при x в 3x - 7 = 0?", "options": ["3", "-7", "0", "10"], "correct_answer": "3"},
+                {"question": "Решите: x/2 = 6", "options": ["x = 3", "x = 12", "x = 8", "x = 4"], "correct_answer": "x = 12"},
+                {"question": "Решений 0x + 5 = 5?", "options": ["Одно", "Два", "Бесконечно много", "Ни одного"], "correct_answer": "Бесконечно много"},
+                {"question": "x при ax + b = 0?", "options": ["x = -b/a", "x = b/a", "x = a/b", "x = -a/b"], "correct_answer": "x = -b/a"}
+            ],
+            "Треугольники": [
+                {"question": "Сумма углов треугольника?", "options": ["90°", "180°", "270°", "360°"], "correct_answer": "180°"},
+                {"question": "Треугольник с равными сторонами?", "options": ["Равнобедренный", "Прямоугольный", "Равносторонний", "Тупоугольный"], "correct_answer": "Равносторонний"},
+                {"question": "Площадь треугольника?", "options": ["S = a×h", "S = (1/2)×a×h", "S = a²", "S = 2×a×h"], "correct_answer": "S = (1/2)×a×h"},
+                {"question": "Неравенство сторон?", "options": ["a + b = c", "a + b < c", "a + b > c", "a = b = c"], "correct_answer": "a + b > c"},
+                {"question": "Треугольник с углом 90°?", "options": ["Острый", "Тупой", "Прямоугольный", "Равнобедренный"], "correct_answer": "Прямоугольный"}
+            ],
+            "Кинематика": [
+                {"question": "Формула пути?", "options": ["S = v × t", "S = v / t", "S = v + t", "S = v - t"], "correct_answer": "S = v × t"},
+                {"question": "Единица скорости в СИ?", "options": ["м/с", "км/ч", "м/мин", "см/с"], "correct_answer": "м/с"},
+                {"question": "Ускорение характеризует?", "options": ["Изменение скорости", "Путь", "Положение", "Массу"], "correct_answer": "Изменение скорости"},
+                {"question": "При равномерном движении скорость?", "options": ["Постоянна", "Возрастает", "Убывает", "Равна нулю"], "correct_answer": "Постоянна"},
+                {"question": "Путь при равноускоренном движении?", "options": ["S = v₀t + at²/2", "S = vt", "S = at", "S = v/t"], "correct_answer": "S = v₀t + at²/2"}
+            ]
         }
         
-        # Возвращаем готовый тест если есть, иначе создаем базовый
-        if topic in sample_tests:
-            return sample_tests[topic]
-        else:
-            return {
-                "questions": [
-                    {
-                        "question": f"Базовый вопрос по теме '{topic}' из раздела '{section}' предмета '{subject}'",
-                        "options": ["Вариант А", "Вариант Б", "Вариант В", "Вариант Г"],
-                        "correct_answer": "Вариант А"
-                    },
-                    {
-                        "question": f"Второй вопрос по теме '{topic}' (уровень: {difficulty})",
-                        "options": ["Ответ 1", "Ответ 2", "Ответ 3", "Ответ 4"],
-                        "correct_answer": "Ответ 1"
-                    },
-                    {
-                        "question": f"Третий вопрос по теме '{topic}'",
-                        "options": ["Опция A", "Опция B", "Опция C", "Опция D"],
-                        "correct_answer": "Опция A"
-                    },
-                    {
-                        "question": f"Четвертый вопрос по теме '{topic}'",
-                        "options": ["Выбор 1", "Выбор 2", "Выбор 3", "Выбор 4"],
-                        "correct_answer": "Выбор 1"
-                    },
-                    {
-                        "question": f"Пятый вопрос по теме '{topic}'",
-                        "options": ["Решение А", "Решение Б", "Решение В", "Решение Г"],
-                        "correct_answer": "Решение А"
-                    }
+        if topic in local_tests:
+            return {"questions": local_tests[topic][:NUM_QUESTIONS]}
+        
+        # Генерируем заглушку
+        return {"questions": [
+            {"question": f"Вопрос {i+1} по теме '{topic}'", 
+             "options": ["А", "Б", "В", "Г"], "correct_answer": "А"}
+            for i in range(NUM_QUESTIONS)
+        ]}
+    
+    def calculate_results(self) -> Optional[Dict[str, Any]]:
+        """Подсчёт результатов"""
+        try:
+            self.init_session()
+            state = flask_session.get('testing_state', {})
+            test = state.get('current_test')
+            answers = state.get('user_answers', {})
+            
+            if not test:
+                return None
+            
+            questions = test['questions']
+            correct = sum(1 for i, q in enumerate(questions) if answers.get(i) == q['correct_answer'])
+            total = len(questions)
+            pct = (correct / total) * 100 if total else 0
+            
+            # Оценка
+            grades = [
+                (90, "Отлично", "🏆", "Невероятно! Вы мастер!", "🎉🎊✨🌟💫"),
+                (70, "Хорошо", "👍", "Отлично справились!", "👏🎈🌟💪"),
+                (50, "Удовлетворительно", "👌", "Неплохо! Есть база!", "🌱💪📖"),
+                (0, "Нужно подучить", "📚", "Не расстраивайтесь!", "💪🌟📚🚀")
+            ]
+            
+            for threshold, grade, icon, msg, emojis in grades:
+                if pct >= threshold:
+                    break
+            
+            results = {
+                'correct_count': correct, 'total_questions': total, 'percentage': pct,
+                'grade': grade, 'grade_icon': icon, 'congratulations': msg,
+                'celebration_emojis': emojis,
+                'detailed_results': [
+                    {'question': q['question'], 'user_answer': answers.get(i, ""),
+                     'correct_answer': q['correct_answer'], 'is_correct': answers.get(i) == q['correct_answer']}
+                    for i, q in enumerate(questions)
                 ]
             }
-    
-    def calculate_results(self):
-        """Подсчет результатов теста"""
-        try:
-            # Инициализация сессии тестирования (если еще не инициализировано)
-            self.init_testing_session()
             
-            state = flask_session.get('testing_state', {})
-            test = state['current_test']
-            answers = state['user_answers']
-            
-            correct_count = 0
-            total_questions = len(test['questions'])
-            
-            detailed_results = []
-            
-            for i, question in enumerate(test['questions']):
-                user_answer = answers.get(i, "")
-                correct_answer = question['correct_answer']
-                is_correct = user_answer == correct_answer
-                
-                if is_correct:
-                    correct_count += 1
-                
-                detailed_results.append({
-                    'question': question['question'],
-                    'user_answer': user_answer,
-                    'correct_answer': correct_answer,
-                    'is_correct': is_correct
-                })
-            
-            percentage = (correct_count / total_questions) * 100
-            
-            # Определяем оценку с позитивными сообщениями
-            if percentage >= 90:
-                grade = "Отлично"
-                grade_icon = "🏆"
-                congratulations = random.choice([
-                    "Невероятно! Вы настоящий знаток!",
-                    "Фантастика! Блестящий результат!",
-                    "Браво! Вы просто великолепны!",
-                    "Потрясающе! Вы мастер этой темы!",
-                    "Восхитительно! Вы на высоте!"
-                ])
-                celebration_emojis = "🎉🎊✨🌟💫🎯🏆👑"
-            elif percentage >= 70:
-                grade = "Хорошо"
-                grade_icon = "👍"
-                congratulations = random.choice([
-                    "Отлично справились! Хороший результат!",
-                    "Молодец! Вы на правильном пути!",
-                    "Здорово! Продолжайте в том же духе!",
-                    "Хорошая работа! Есть к чему стремиться!",
-                    "Замечательно! Вы показали хорошие знания!"
-                ])
-                celebration_emojis = "👏🎈🌟💪🎯📚"
-            elif percentage >= 50:
-                grade = "Удовлетворительно"
-                grade_icon = "👌"
-                congratulations = random.choice([
-                    "Неплохо! Есть база для роста!",
-                    "Хорошее начало! Продолжайте изучать!",
-                    "Достойно! Немного практики и будет лучше!",
-                    "Справились! Есть над чем поработать!",
-                    "Молодец, что не сдались! Вперед к новым высотам!"
-                ])
-                celebration_emojis = "🌱💪📖🎓✊"
-            else:
-                grade = "Нужно подучить"
-                grade_icon = "📚"
-                congratulations = random.choice([
-                    "Не расстраивайтесь! Это отличная возможность учиться!",
-                    "Все проходили через это! Главное не сдаваться!",
-                    "Ошибки - это ступеньки к знаниям!",
-                    "Не беда! Повторите материал и попробуйте снова!",
-                    "Каждый эксперт когда-то был новичком! Вперед!"
-                ])
-                celebration_emojis = "💪🌟📚🚀💡"
-            
-            state['test_results'] = {
-                'correct_count': correct_count,
-                'total_questions': total_questions,
-                'percentage': percentage,
-                'grade': grade,
-                'grade_icon': grade_icon,
-                'congratulations': congratulations,
-                'celebration_emojis': celebration_emojis,
-                'detailed_results': detailed_results
-            }
-            
+            state['test_results'] = results
+            return results
         except Exception as e:
-            st.error(f"Ошибка подсчета результатов: {e}")
-            print(f"Ошибка подсчета результатов: {e}")
+            print(f"Ошибка подсчёта: {e}")
+            return None
     
-    def show_results(self):
-        """Показать результаты теста"""
-        try:
-            # Инициализация сессии тестирования (если еще не инициализировано)
-            self.init_testing_session()
-            
-            state = flask_session.get('testing_state', {})
-            results = state['test_results']
-            
-            if not results:
-                state['current_page'] = 'subjects'
-                st.rerun()
-                return
-            
-            # Заголовок результатов с анимацией
-            icon = self.SUBJECTS_STRUCTURE[state['selected_subject']]["icon"]
-            st.subheader(f"{icon} Результаты тестирования")
-            
-            # Показываем анимированное празднование с тематическими элементами
-            self.show_animated_celebration(state['selected_subject'], results['percentage'])
-            
-            # Воспроизводим звуковые эффекты
-            if results['percentage'] >= 90:
-                self.play_sound_effect('excellent_result', state['selected_subject'])
-            elif results['percentage'] >= 70:
-                self.play_sound_effect('good_result', state['selected_subject'])
-            elif results['percentage'] >= 50:
-                self.play_sound_effect('try_again', state['selected_subject'])
-            else:
-                self.play_sound_effect('try_again', state['selected_subject'])
-            
-            # Основные результаты в красивом оформлении
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric(
-                    "Правильных ответов",
-                    f"{results['correct_count']}/{results['total_questions']}",
-                    delta=f"{results['correct_count']} из {results['total_questions']}"
-                )
-            
-            with col2:
-                st.metric(
-                    "Процент правильных",
-                    f"{results['percentage']:.1f}%",
-                    delta="Ваш результат"
-                )
-            
-            with col3:
-                st.metric(
-                    "Итоговая оценка",
-                    f"{results['grade_icon']} {results['grade']}",
-                    delta="Поздравляем!"
-                )
-            
-            st.markdown("---")
-            
-            # Детальные результаты с позитивными комментариями
-            st.subheader("📋 Разбор вопросов:")
-            
-            positive_comments = [
-                "Великолепно! 🌟", "Превосходно! ✨", "Блестяще! 💫", 
-                "Отлично! 🎯", "Замечательно! 🎉", "Молодец! 👏"
-            ]
-            
-            encouraging_comments = [
-                "Ничего страшного! Теперь вы знаете правильный ответ! 💪",
-                "Хорошая попытка! Запомните этот момент! 📝",
-                "Не беда! Это отличный урок! 🌱",
-                "Теперь вы точно запомните! 🧠",
-                "Ошибка - путь к знаниям! 🚀",
-                "Так учатся все эксперты! 💡"
-            ]
-            
-            for i, result in enumerate(results['detailed_results']):
-                emoji = "✅" if result['is_correct'] else "📝"
-                with st.expander(f"Вопрос {i+1} {emoji}"):
-                    st.write(f"**Вопрос:** {result['question']}")
-                    st.write(f"**Ваш ответ:** {result['user_answer']}")
-                    st.write(f"**Правильный ответ:** {result['correct_answer']}")
-                    
-                    if result['is_correct']:
-                        comment = random.choice(positive_comments)
-                        st.success(f"{comment}")
-                        # Небольшой звуковой эффект для правильного ответа (только текст)
-                        if i == 0:  # Только для первого вопроса, чтобы не спамить
-                            st.caption("🎵 *звон успеха* ✨")
-                    else:
-                        comment = random.choice(encouraging_comments)
-                        st.info(f"{comment}")
-                        # Мягкий звук для неправильного ответа
-                        if i == 0:  # Только для первого вопроса
-                            st.caption("🤔 *мягкий звук обучения* 💭")
-            
-            st.markdown("---")
-            
-            # Мотивирующие рекомендации
-            if results['percentage'] >= 90:
-                st.success("🏆 Вы показали выдающиеся знания! Попробуйте более сложные темы или помогите другим!")
-            elif results['percentage'] >= 70:
-                st.info("📈 Отличная работа! Можете попробовать повысить уровень сложности!")
-            elif results['percentage'] >= 50:
-                st.info("📚 Хорошая база! Рекомендуем повторить теорию и попробовать еще раз!")
-            else:
-                st.info("🎯 Не расстраивайтесь! Изучите теорию по этой теме и возвращайтесь за новыми знаниями!")
-            
-            # Кнопки действий с веселыми эмодзи
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                if st.button("🔄 Попробовать снова", use_container_width=True, key="try_again_results_button"):
-                    state['current_test'] = None
-                    state['user_answers'] = {}
-                    state['test_results'] = None
-                    state['current_page'] = 'test'
-                    st.rerun()
-            
-            with col2:
-                if st.button("🎯 Другая тема", use_container_width=True, key="different_topic_results_button"):
-                    state['current_test'] = None
-                    state['user_answers'] = {}
-                    state['test_results'] = None
-                    state['selected_topic'] = None
-                    state['selected_difficulty'] = None
-                    state['current_page'] = 'topics'
-                    st.rerun()
-            
-            with col3:
-                if st.button("📚 Изучить теорию", use_container_width=True, key="study_theory_button"):
-                    # Переключаемся на вкладку теории с той же темой
-                    if 'theory_state' not in flask_session:
-                        flask_session['theory_state'] = {}
-                    
-                    flask_session['theory_state'].update({
-                        'current_page': 'explanation',
-                        'selected_subject': state['selected_subject'],
-                        'selected_section': state['selected_section'],
-                        'selected_topic': state['selected_topic']
-                    })
-                    
-                    st.info("🚀 Переключаемся на изучение теории! Перейдите на вкладку 'Теория'")
-                    st.balloons()
-                    
-                    # Звук перехода к теории
-                    self.play_sound_effect('start_test', state['selected_subject'])
-            
-            st.markdown("---")
-            
-            # Дополнительная кнопка для веселья
-            if st.button("🎪 Хочу еще анимацию!", use_container_width=True, key="more_animation_button"):
-                # Дополнительное празднование
-                self.show_animated_celebration(state['selected_subject'], results['percentage'])
-                self.play_sound_effect('excellent_result', state['selected_subject'])
-                
-                # Смешной комментарий
-                funny_comment = self.get_funny_subject_comment(state['selected_subject'])
-                st.success(f"🎉 {funny_comment}")
-                
-                # Случайная анимация
-                animations = [st.balloons, st.snow]
-                random.choice(animations)()
-            
-        except Exception as e:
-            st.error(f"Ошибка отображения результатов: {e}")
-            print(f"Ошибка отображения результатов: {e}")
+    def get_funny_comment(self, subject: str) -> str:
+        """Смешной комментарий для предмета"""
+        data = SUBJECT_DATA.get(subject, {"comments": ["Отлично! 🎉"]})
+        return random.choice(data["comments"])
+    
+    def show_celebration(self, subject: str, percentage: float) -> Dict[str, Any]:
+        """Данные для празднования"""
+        data = SUBJECT_DATA.get(subject, {"emojis": "🎉✨", "comments": ["Молодец!"]})
+        
+        types = [(90, 'excellent', '🏆🎉🌟'), (70, 'good', '🌟👍💪'),
+                (50, 'average', '🌱💪📚'), (0, 'low', '💪🌟📚🚀')]
+        
+        for threshold, t, stickers in types:
+            if percentage >= threshold:
+                break
+        
+        return {
+            'animation_emojis': data['emojis'],
+            'comment': random.choice(data['comments']),
+            'grade_percentage': percentage,
+            'type': t,
+            'stickers': stickers
+        }
 
-# Создание экземпляра менеджера тестирования
+
+# Экземпляр менеджера
 testing_manager = TestingManager()

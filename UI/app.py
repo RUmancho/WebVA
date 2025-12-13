@@ -750,14 +750,26 @@ def api_theory_sections():
         if not subject:
             return jsonify({'error': 'Предмет не указан'}), 400
         
-        session['theory_state'] = session.get('theory_state', {})
+        # Сохраняем в сессию
+        if 'theory_state' not in session:
+            session['theory_state'] = {}
         session['theory_state']['selected_subject'] = subject
         session['theory_state']['current_page'] = 'sections'
+        session.modified = True
         
-        data = theory_manager.show_sections()
-        return jsonify(data)
+        # Получаем разделы напрямую из структуры
+        if subject not in theory_manager.SUBJECTS_STRUCTURE:
+            return jsonify({'error': f'Предмет "{subject}" не найден'}), 400
+        
+        sections = theory_manager.SUBJECTS_STRUCTURE[subject]["sections"]
+        return jsonify({
+            'subject': subject,
+            'sections': sections
+        })
     except Exception as e:
         print(f"Ошибка получения разделов: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/theory/topics', methods=['GET'])
@@ -772,15 +784,31 @@ def api_theory_topics():
         if not subject or not section:
             return jsonify({'error': 'Предмет или раздел не указан'}), 400
         
-        session['theory_state'] = session.get('theory_state', {})
+        # Сохраняем в сессию
+        if 'theory_state' not in session:
+            session['theory_state'] = {}
         session['theory_state']['selected_subject'] = subject
         session['theory_state']['selected_section'] = section
         session['theory_state']['current_page'] = 'topics'
+        session.modified = True
         
-        data = theory_manager.show_topics()
-        return jsonify(data)
+        # Получаем темы напрямую из структуры
+        if subject not in theory_manager.SUBJECTS_STRUCTURE:
+            return jsonify({'error': f'Предмет "{subject}" не найден'}), 400
+        
+        if section not in theory_manager.SUBJECTS_STRUCTURE[subject]["sections"]:
+            return jsonify({'error': f'Раздел "{section}" не найден'}), 400
+        
+        topics = theory_manager.SUBJECTS_STRUCTURE[subject]["sections"][section]["topics"]
+        return jsonify({
+            'subject': subject,
+            'section': section,
+            'topics': topics
+        })
     except Exception as e:
         print(f"Ошибка получения тем: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/theory/explanation', methods=['POST'])
@@ -873,23 +901,29 @@ def api_testing_select_subject():
     """API для выбора предмета"""
     if not auth_manager.is_logged_in():
         return jsonify({'error': 'Не авторизован'}), 401
-    
+
     try:
         data = request.get_json()
         subject = data.get('subject')
         if not subject:
             return jsonify({'error': 'Предмет не указан'}), 400
-        
-        session['testing_state'] = session.get('testing_state', {})
+
+        # Сохраняем в сессию
+        if 'testing_state' not in session:
+            session['testing_state'] = {}
         session['testing_state']['selected_subject'] = subject
         session['testing_state']['current_page'] = 'sections'
         session['testing_state']['selected_section'] = None
         session['testing_state']['selected_topic'] = None
-        
-        result = testing_manager.show_sections()
+        session.modified = True
+
+        # Передаём предмет напрямую в метод
+        result = testing_manager.show_sections(subject=subject)
         return jsonify(result)
     except Exception as e:
         print(f"Ошибка выбора предмета: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/testing/select-section', methods=['POST'])
@@ -897,21 +931,33 @@ def api_testing_select_section():
     """API для выбора раздела"""
     if not auth_manager.is_logged_in():
         return jsonify({'error': 'Не авторизован'}), 401
-    
+
     try:
         data = request.get_json()
         section = data.get('section')
         if not section:
             return jsonify({'error': 'Раздел не указан'}), 400
+
+        # Получаем предмет из сессии
+        testing_state = session.get('testing_state', {})
+        subject = testing_state.get('selected_subject')
         
+        if not subject:
+            return jsonify({'error': 'Сначала выберите предмет'}), 400
+
+        # Сохраняем в сессию
         session['testing_state']['selected_section'] = section
         session['testing_state']['current_page'] = 'topics'
         session['testing_state']['selected_topic'] = None
-        
-        result = testing_manager.show_topics()
+        session.modified = True
+
+        # Передаём параметры напрямую в метод
+        result = testing_manager.show_topics(subject=subject, section=section)
         return jsonify(result)
     except Exception as e:
         print(f"Ошибка выбора раздела: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/testing/select-topic', methods=['POST'])
@@ -1140,6 +1186,297 @@ def api_formulas_calculate():
     except Exception as e:
         print(f"Ошибка вычисления формулы: {e}")
         return jsonify({'error': str(e)}), 500
+
+# ==================== API для НАСТРОЕК ====================
+@app.route('/api/settings', methods=['GET'])
+def api_get_settings():
+    """API для получения настроек пользователя"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        settings = db.get_user_settings(user['id'])
+        return jsonify({'settings': settings})
+    except Exception as e:
+        print(f"Ошибка получения настроек: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/settings', methods=['POST'])
+def api_update_settings():
+    """API для обновления настроек пользователя"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        data = request.get_json()
+        success, message = db.update_user_settings(user['id'], data)
+        return jsonify({'success': success, 'message': message})
+    except Exception as e:
+        print(f"Ошибка обновления настроек: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/settings/theme', methods=['POST'])
+def api_update_theme():
+    """API для обновления темы"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        data = request.get_json()
+        theme = data.get('theme', 'light')
+        success, message = db.update_user_settings(user['id'], {'theme': theme})
+        return jsonify({'success': success})
+    except Exception as e:
+        print(f"Ошибка обновления темы: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/settings/reset', methods=['POST'])
+def api_reset_settings():
+    """API для сброса настроек"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        success, message = db.reset_user_settings(user['id'])
+        return jsonify({'success': success, 'message': message})
+    except Exception as e:
+        print(f"Ошибка сброса настроек: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ==================== API для ЗАДАНИЙ КЛАССУ ====================
+@app.route('/api/assignments', methods=['GET'])
+def api_get_assignments():
+    """API для получения заданий"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        
+        if user['role'] == 'Учитель':
+            assignments = db.get_teacher_assignments(user['id'])
+            return jsonify({'role': 'teacher', 'assignments': assignments})
+        else:
+            assignments = db.get_student_assignments(user['id'])
+            return jsonify({'role': 'student', 'assignments': assignments})
+    except Exception as e:
+        print(f"Ошибка получения заданий: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/assignments/<int:assignment_id>', methods=['GET'])
+def api_get_assignment(assignment_id):
+    """API для получения конкретного задания"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        assignment = db.get_assignment_by_id(assignment_id)
+        if not assignment:
+            return jsonify({'error': 'Задание не найдено'}), 404
+        return jsonify(assignment)
+    except Exception as e:
+        print(f"Ошибка получения задания: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/assignments/create', methods=['POST'])
+def api_create_assignment():
+    """API для создания задания"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if user['role'] != 'Учитель':
+            return jsonify({'error': 'Только учителя могут создавать задания'}), 403
+        
+        data = request.get_json()
+        
+        title = data.get('title')
+        subject = data.get('subject')
+        
+        if not title or not subject:
+            return jsonify({'error': 'Название и предмет обязательны'}), 400
+        
+        import json
+        questions_json = json.dumps(data.get('questions', []), ensure_ascii=False)
+        
+        deadline = None
+        if data.get('deadline'):
+            deadline = datetime.fromisoformat(data['deadline'])
+        
+        success, result = db.create_class_assignment(
+            teacher_id=user['id'],
+            title=title,
+            description=data.get('description', ''),
+            subject=subject,
+            topic=data.get('topic', ''),
+            difficulty=data.get('difficulty', 'Средний'),
+            assignment_type='test',
+            questions_json=questions_json,
+            target_city=data.get('target_city', ''),
+            target_school=data.get('target_school', ''),
+            target_class=data.get('target_class', ''),
+            deadline=deadline
+        )
+        
+        if success:
+            return jsonify({'success': True, 'assignment_id': result})
+        else:
+            return jsonify({'error': result}), 500
+    except Exception as e:
+        print(f"Ошибка создания задания: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/assignments/generate-test', methods=['POST'])
+def api_generate_test():
+    """API для генерации теста (через LLM или math_generator)"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        subject = data.get('subject')
+        topic = data.get('topic', '')
+        difficulty = data.get('difficulty', 'Средний')
+        gen_type = data.get('generation_type', 'llm')
+        count = data.get('count', 5)
+        
+        if not subject:
+            return jsonify({'error': 'Укажите предмет'}), 400
+        
+        # Используем testing_manager для генерации
+        test = testing_manager.generate_test(subject, '', topic or subject, difficulty)
+        
+        if test and 'questions' in test:
+            # Ограничиваем количество вопросов
+            test['questions'] = test['questions'][:count]
+            return jsonify({'test': test})
+        else:
+            return jsonify({'error': 'Не удалось сгенерировать тест'}), 500
+    except Exception as e:
+        print(f"Ошибка генерации теста: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/assignments/<int:assignment_id>/submit', methods=['POST'])
+def api_submit_assignment(assignment_id):
+    """API для отправки ответа на задание"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if user['role'] != 'Ученик':
+            return jsonify({'error': 'Только ученики могут отправлять ответы'}), 403
+        
+        data = request.get_json()
+        answers = data.get('answers', {})
+        time_spent = data.get('time_spent', 0)
+        
+        # Получаем задание для проверки ответов
+        assignment = db.get_assignment_by_id(assignment_id)
+        if not assignment:
+            return jsonify({'error': 'Задание не найдено'}), 404
+        
+        import json
+        questions = json.loads(assignment['questions_json'])
+        
+        # Проверяем ответы
+        score = 0
+        max_score = len(questions)
+        
+        for i, q in enumerate(questions):
+            user_answer = answers.get(str(i)) or answers.get(i)
+            if user_answer == q['correct_answer']:
+                score += 1
+        
+        percentage = int((score / max_score) * 100) if max_score > 0 else 0
+        
+        answers_json = json.dumps(answers, ensure_ascii=False)
+        
+        success, result = db.submit_assignment(
+            assignment_id=assignment_id,
+            student_id=user['id'],
+            answers_json=answers_json,
+            score=score,
+            max_score=max_score,
+            time_spent=time_spent
+        )
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'score': score,
+                'max_score': max_score,
+                'percentage': percentage
+            })
+        else:
+            return jsonify({'error': result}), 400
+    except Exception as e:
+        print(f"Ошибка отправки ответа: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/assignments/<int:assignment_id>/statistics', methods=['GET'])
+def api_assignment_statistics(assignment_id):
+    """API для получения статистики по заданию"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if user['role'] != 'Учитель':
+            return jsonify({'error': 'Только учителя могут просматривать статистику'}), 403
+        
+        stats = db.get_assignment_statistics(assignment_id)
+        if not stats:
+            return jsonify({'error': 'Статистика не найдена'}), 404
+        
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Ошибка получения статистики: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/assignments/<int:assignment_id>/toggle', methods=['POST'])
+def api_toggle_assignment(assignment_id):
+    """API для активации/деактивации задания"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if user['role'] != 'Учитель':
+            return jsonify({'error': 'Только учителя могут управлять заданиями'}), 403
+        
+        success, message = db.toggle_assignment_active(assignment_id, user['id'])
+        return jsonify({'success': success, 'message': message})
+    except Exception as e:
+        print(f"Ошибка переключения задания: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/class-statistics', methods=['GET'])
+def api_class_statistics():
+    """API для получения статистики по классу"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if user['role'] != 'Учитель':
+            return jsonify({'error': 'Только учителя могут просматривать статистику'}), 403
+        
+        city = request.args.get('city')
+        school = request.args.get('school')
+        class_number = request.args.get('class')
+        
+        stats = db.get_class_statistics(user['id'], city, school, class_number)
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Ошибка получения статистики класса: {e}")
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     # Получаем локальный IP-адрес

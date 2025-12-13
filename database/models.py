@@ -14,7 +14,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
-    role = Column(String(50), nullable=False)  # Ученик или Учитель
+    role = Column(String(10), nullable=False)
     city = Column(String(100))
     school = Column(String(255))
     class_number = Column(String(10))  # Для учеников
@@ -153,3 +153,97 @@ class Notification(Base):
     
     def __repr__(self):
         return f"<Notification(id={self.id}, user_id={self.user_id}, title='{self.title}', is_read={self.is_read})>"
+
+
+class ClassAssignment(Base):
+    """Модель задания для класса от учителя"""
+    __tablename__ = 'class_assignments'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    teacher_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    subject = Column(String(100))
+    topic = Column(String(255))
+    difficulty = Column(String(50), default='Средний')  # Лёгкий, Средний, Хардкор
+    assignment_type = Column(String(50), default='test')  # test, practice, homework
+    questions_json = Column(Text)  # JSON с вопросами теста
+    target_city = Column(String(100))
+    target_school = Column(String(255))
+    target_class = Column(String(50))  # Класс или несколько классов через запятую
+    deadline = Column(DateTime)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Связи
+    teacher = relationship("User", foreign_keys=[teacher_id])
+    submissions = relationship("AssignmentSubmission", back_populates="assignment")
+    
+    def __repr__(self):
+        return f"<ClassAssignment(id={self.id}, title='{self.title}', teacher_id={self.teacher_id})>"
+
+
+class AssignmentSubmission(Base):
+    """Модель ответа ученика на задание"""
+    __tablename__ = 'assignment_submissions'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    assignment_id = Column(Integer, ForeignKey('class_assignments.id'), nullable=False)
+    student_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    answers_json = Column(Text)  # JSON с ответами ученика
+    score = Column(Integer, default=0)
+    max_score = Column(Integer, default=0)
+    percentage = Column(Integer, default=0)  # Процент правильных ответов
+    time_spent = Column(Integer, default=0)  # Время выполнения в секундах
+    status = Column(String(50), default='submitted')  # submitted, graded, reviewed
+    feedback = Column(Text)  # Обратная связь от учителя
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    graded_at = Column(DateTime)
+    
+    # Связи
+    assignment = relationship("ClassAssignment", back_populates="submissions")
+    student = relationship("User", foreign_keys=[student_id])
+    
+    def __repr__(self):
+        return f"<AssignmentSubmission(id={self.id}, assignment_id={self.assignment_id}, student_id={self.student_id}, score={self.score})>"
+
+
+class UserSettings(Base):
+    """Модель настроек пользователя"""
+    __tablename__ = 'user_settings'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, unique=True)
+    theme = Column(String(20), default='light')  # light, dark
+    font_size = Column(String(20), default='medium')  # small, medium, large
+    notifications_enabled = Column(Boolean, default=True)
+    sound_enabled = Column(Boolean, default=True)
+    language = Column(String(10), default='ru')
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Связи
+    user = relationship("User", backref="settings")
+    
+    def __repr__(self):
+        return f"<UserSettings(user_id={self.user_id}, theme='{self.theme}')>"
+    
+    def to_dict(self):
+        """Преобразование в словарь"""
+        return {
+            'theme': self.theme,
+            'font_size': self.font_size,
+            'notifications_enabled': self.notifications_enabled,
+            'sound_enabled': self.sound_enabled,
+            'language': self.language
+        }
+    
+    @staticmethod
+    def get_defaults():
+        """Получить настройки по умолчанию"""
+        return {
+            'theme': 'light',
+            'font_size': 'medium',
+            'notifications_enabled': True,
+            'sound_enabled': True,
+            'language': 'ru'
+        }

@@ -4,7 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 import hashlib
 from datetime import datetime, timedelta
 from database.settings import DATABASE_URL
-from database.models import Base, User, StudentTeacherRelation, TeacherRequest, Call, LessonRecord, Notification
+from database.models import *
 
 class Database:
     """Класс для работы с базой данных через SQLAlchemy ORM"""
@@ -971,5 +971,474 @@ class Database:
         finally:
             session.close()
 
-# Создание экземпляра базы данных
+    # ==================== Методы для настроек пользователя ====================
+    
+    def get_user_settings(self, user_id):
+        """Получение настроек пользователя"""
+        session = self.get_session()
+        try:
+            settings = session.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+            if settings:
+                return settings.to_dict()
+            return UserSettings.get_defaults()
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения настроек: {e}")
+            return UserSettings.get_defaults()
+        finally:
+            session.close()
+    
+    def update_user_settings(self, user_id, settings_data):
+        """Обновление настроек пользователя"""
+        session = self.get_session()
+        try:
+            settings = session.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+            if not settings:
+                settings = UserSettings(user_id=user_id)
+                session.add(settings)
+            
+            if 'theme' in settings_data:
+                settings.theme = settings_data['theme']
+            if 'font_size' in settings_data:
+                settings.font_size = settings_data['font_size']
+            if 'notifications_enabled' in settings_data:
+                settings.notifications_enabled = settings_data['notifications_enabled']
+            if 'sound_enabled' in settings_data:
+                settings.sound_enabled = settings_data['sound_enabled']
+            if 'language' in settings_data:
+                settings.language = settings_data['language']
+            
+            session.commit()
+            return True, "Настройки обновлены"
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Ошибка обновления настроек: {e}")
+            return False, str(e)
+        finally:
+            session.close()
+    
+    def reset_user_settings(self, user_id):
+        """Сброс настроек пользователя к значениям по умолчанию"""
+        session = self.get_session()
+        try:
+            settings = session.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+            if settings:
+                defaults = UserSettings.get_defaults()
+                settings.theme = defaults['theme']
+                settings.font_size = defaults['font_size']
+                settings.notifications_enabled = defaults['notifications_enabled']
+                settings.sound_enabled = defaults['sound_enabled']
+                settings.language = defaults['language']
+                session.commit()
+            return True, "Настройки сброшены"
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Ошибка сброса настроек: {e}")
+            return False, str(e)
+        finally:
+            session.close()
+    
+    # ==================== Методы для заданий классу ====================
+    
+    def create_class_assignment(self, teacher_id, title, description, subject, topic, 
+                                 difficulty, assignment_type, questions_json,
+                                 target_city, target_school, target_class, deadline=None):
+        """Создание задания для класса"""
+        session = self.get_session()
+        try:
+            new_assignment = ClassAssignment(
+                teacher_id=teacher_id,
+                title=title,
+                description=description,
+                subject=subject,
+                topic=topic,
+                difficulty=difficulty,
+                assignment_type=assignment_type,
+                questions_json=questions_json,
+                target_city=target_city,
+                target_school=target_school,
+                target_class=target_class,
+                deadline=deadline,
+                is_active=True
+            )
+            
+            session.add(new_assignment)
+            session.commit()
+            assignment_id = new_assignment.id
+            
+            # Создаём уведомления для учеников
+            students = self._get_students_by_criteria(session, target_city, target_school, target_class)
+            for student in students:
+                notification = Notification(
+                    user_id=student.id,
+                    title=f"📝 Новое задание: {title}",
+                    message=f"Учитель назначил новое задание по предмету {subject}. Тема: {topic}",
+                    is_read=False
+                )
+                session.add(notification)
+            
+            session.commit()
+            
+            print(f"Задание создано: {title} для класса {target_class}")
+            return True, assignment_id
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Ошибка создания задания: {e}")
+            return False, str(e)
+        finally:
+            session.close()
+    
+    def _get_students_by_criteria(self, session, city, school, class_number):
+        """Получение учеников по критериям (внутренний метод)"""
+        query = session.query(User).filter(User.role == 'Ученик')
+        
+        if city:
+            query = query.filter(User.city == city)
+        if school:
+            query = query.filter(User.school == school)
+        if class_number:
+            # Поддержка нескольких классов через запятую
+            classes = [c.strip() for c in class_number.split(',')]
+            query = query.filter(User.class_number.in_(classes))
+        
+        return query.all()
+    
+    def get_teacher_assignments(self, teacher_id):
+        """Получение заданий учителя"""
+        session = self.get_session()
+        try:
+            assignments = session.query(ClassAssignment).filter(
+                ClassAssignment.teacher_id == teacher_id
+            ).order_by(ClassAssignment.created_at.desc()).all()
+            
+            result = []
+            for a in assignments:
+                submissions = session.query(AssignmentSubmission).filter(
+                    AssignmentSubmission.assignment_id == a.id
+                ).all()
+                
+                result.append({
+                    'id': a.id,
+                    'title': a.title,
+                    'description': a.description,
+                    'subject': a.subject,
+                    'topic': a.topic,
+                    'difficulty': a.difficulty,
+                    'assignment_type': a.assignment_type,
+                    'target_city': a.target_city,
+                    'target_school': a.target_school,
+                    'target_class': a.target_class,
+                    'deadline': a.deadline.strftime('%Y-%m-%d %H:%M') if a.deadline else None,
+                    'is_active': a.is_active,
+                    'created_at': a.created_at.strftime('%Y-%m-%d %H:%M'),
+                    'submissions_count': len(submissions),
+                    'avg_score': sum(s.percentage for s in submissions) / len(submissions) if submissions else 0
+                })
+            
+            return result
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения заданий: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def get_student_assignments(self, student_id):
+        """Получение заданий для ученика"""
+        session = self.get_session()
+        try:
+            student = session.query(User).filter(User.id == student_id).first()
+            if not student:
+                return []
+            
+            # Получаем задания, подходящие для ученика
+            query = session.query(ClassAssignment).filter(
+                ClassAssignment.is_active == True
+            )
+            
+            if student.city:
+                query = query.filter(
+                    or_(ClassAssignment.target_city == student.city, ClassAssignment.target_city == None)
+                )
+            if student.school:
+                query = query.filter(
+                    or_(ClassAssignment.target_school == student.school, ClassAssignment.target_school == None)
+                )
+            if student.class_number:
+                query = query.filter(
+                    or_(
+                        ClassAssignment.target_class.contains(student.class_number),
+                        ClassAssignment.target_class == None
+                    )
+                )
+            
+            assignments = query.order_by(ClassAssignment.created_at.desc()).all()
+            
+            result = []
+            for a in assignments:
+                # Проверяем, отправил ли ученик ответ
+                submission = session.query(AssignmentSubmission).filter(
+                    and_(
+                        AssignmentSubmission.assignment_id == a.id,
+                        AssignmentSubmission.student_id == student_id
+                    )
+                ).first()
+                
+                teacher = session.query(User).filter(User.id == a.teacher_id).first()
+                
+                result.append({
+                    'id': a.id,
+                    'title': a.title,
+                    'description': a.description,
+                    'subject': a.subject,
+                    'topic': a.topic,
+                    'difficulty': a.difficulty,
+                    'assignment_type': a.assignment_type,
+                    'deadline': a.deadline.strftime('%Y-%m-%d %H:%M') if a.deadline else None,
+                    'created_at': a.created_at.strftime('%Y-%m-%d %H:%M'),
+                    'teacher_name': f"{teacher.first_name} {teacher.last_name}" if teacher else "Неизвестно",
+                    'is_submitted': submission is not None,
+                    'submission': {
+                        'score': submission.score,
+                        'max_score': submission.max_score,
+                        'percentage': submission.percentage,
+                        'submitted_at': submission.submitted_at.strftime('%Y-%m-%d %H:%M')
+                    } if submission else None
+                })
+            
+            return result
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения заданий ученика: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def get_assignment_by_id(self, assignment_id):
+        """Получение задания по ID"""
+        session = self.get_session()
+        try:
+            assignment = session.query(ClassAssignment).filter(
+                ClassAssignment.id == assignment_id
+            ).first()
+            
+            if not assignment:
+                return None
+            
+            teacher = session.query(User).filter(User.id == assignment.teacher_id).first()
+            
+            return {
+                'id': assignment.id,
+                'title': assignment.title,
+                'description': assignment.description,
+                'subject': assignment.subject,
+                'topic': assignment.topic,
+                'difficulty': assignment.difficulty,
+                'assignment_type': assignment.assignment_type,
+                'questions_json': assignment.questions_json,
+                'target_city': assignment.target_city,
+                'target_school': assignment.target_school,
+                'target_class': assignment.target_class,
+                'deadline': assignment.deadline.strftime('%Y-%m-%d %H:%M') if assignment.deadline else None,
+                'is_active': assignment.is_active,
+                'created_at': assignment.created_at.strftime('%Y-%m-%d %H:%M'),
+                'teacher_id': assignment.teacher_id,
+                'teacher_name': f"{teacher.first_name} {teacher.last_name}" if teacher else "Неизвестно"
+            }
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения задания: {e}")
+            return None
+        finally:
+            session.close()
+    
+    def submit_assignment(self, assignment_id, student_id, answers_json, score, max_score, time_spent=0):
+        """Отправка ответа на задание"""
+        session = self.get_session()
+        try:
+            # Проверяем, не отправлял ли ученик уже ответ
+            existing = session.query(AssignmentSubmission).filter(
+                and_(
+                    AssignmentSubmission.assignment_id == assignment_id,
+                    AssignmentSubmission.student_id == student_id
+                )
+            ).first()
+            
+            if existing:
+                return False, "Вы уже отправили ответ на это задание"
+            
+            percentage = int((score / max_score) * 100) if max_score > 0 else 0
+            
+            submission = AssignmentSubmission(
+                assignment_id=assignment_id,
+                student_id=student_id,
+                answers_json=answers_json,
+                score=score,
+                max_score=max_score,
+                percentage=percentage,
+                time_spent=time_spent,
+                status='submitted'
+            )
+            
+            session.add(submission)
+            session.commit()
+            
+            print(f"Ответ на задание {assignment_id} от ученика {student_id} отправлен")
+            return True, submission.id
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Ошибка отправки ответа: {e}")
+            return False, str(e)
+        finally:
+            session.close()
+    
+    def get_assignment_statistics(self, assignment_id):
+        """Получение статистики по заданию"""
+        session = self.get_session()
+        try:
+            assignment = session.query(ClassAssignment).filter(
+                ClassAssignment.id == assignment_id
+            ).first()
+            
+            if not assignment:
+                return None
+            
+            submissions = session.query(AssignmentSubmission).filter(
+                AssignmentSubmission.assignment_id == assignment_id
+            ).all()
+            
+            if not submissions:
+                return {
+                    'assignment_id': assignment_id,
+                    'title': assignment.title,
+                    'total_submissions': 0,
+                    'avg_score': 0,
+                    'avg_percentage': 0,
+                    'avg_time': 0,
+                    'max_score': 0,
+                    'min_score': 0,
+                    'submissions': []
+                }
+            
+            submissions_data = []
+            for s in submissions:
+                student = session.query(User).filter(User.id == s.student_id).first()
+                submissions_data.append({
+                    'student_id': s.student_id,
+                    'student_name': f"{student.first_name} {student.last_name}" if student else "Неизвестно",
+                    'student_class': student.class_number if student else "",
+                    'score': s.score,
+                    'max_score': s.max_score,
+                    'percentage': s.percentage,
+                    'time_spent': s.time_spent,
+                    'submitted_at': s.submitted_at.strftime('%Y-%m-%d %H:%M')
+                })
+            
+            avg_score = sum(s.score for s in submissions) / len(submissions)
+            avg_percentage = sum(s.percentage for s in submissions) / len(submissions)
+            avg_time = sum(s.time_spent for s in submissions) / len(submissions)
+            
+            return {
+                'assignment_id': assignment_id,
+                'title': assignment.title,
+                'subject': assignment.subject,
+                'topic': assignment.topic,
+                'total_submissions': len(submissions),
+                'avg_score': round(avg_score, 2),
+                'avg_percentage': round(avg_percentage, 2),
+                'avg_time': round(avg_time),
+                'max_score': max(s.percentage for s in submissions),
+                'min_score': min(s.percentage for s in submissions),
+                'submissions': submissions_data
+            }
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения статистики: {e}")
+            return None
+        finally:
+            session.close()
+    
+    def get_class_statistics(self, teacher_id, city=None, school=None, class_number=None):
+        """Получение статистики по классу"""
+        session = self.get_session()
+        try:
+            # Получаем все задания учителя
+            assignments = session.query(ClassAssignment).filter(
+                ClassAssignment.teacher_id == teacher_id
+            )
+            
+            if city:
+                assignments = assignments.filter(ClassAssignment.target_city == city)
+            if school:
+                assignments = assignments.filter(ClassAssignment.target_school == school)
+            if class_number:
+                assignments = assignments.filter(ClassAssignment.target_class.contains(class_number))
+            
+            assignments = assignments.all()
+            
+            if not assignments:
+                return {'total_assignments': 0, 'students': []}
+            
+            # Собираем статистику по ученикам
+            students_stats = {}
+            for a in assignments:
+                submissions = session.query(AssignmentSubmission).filter(
+                    AssignmentSubmission.assignment_id == a.id
+                ).all()
+                
+                for s in submissions:
+                    if s.student_id not in students_stats:
+                        student = session.query(User).filter(User.id == s.student_id).first()
+                        students_stats[s.student_id] = {
+                            'student_id': s.student_id,
+                            'name': f"{student.first_name} {student.last_name}" if student else "Неизвестно",
+                            'class': student.class_number if student else "",
+                            'total_submissions': 0,
+                            'total_score': 0,
+                            'avg_percentage': 0
+                        }
+                    
+                    students_stats[s.student_id]['total_submissions'] += 1
+                    students_stats[s.student_id]['total_score'] += s.percentage
+            
+            # Вычисляем средние
+            for student_id in students_stats:
+                if students_stats[student_id]['total_submissions'] > 0:
+                    students_stats[student_id]['avg_percentage'] = round(
+                        students_stats[student_id]['total_score'] / students_stats[student_id]['total_submissions'],
+                        2
+                    )
+            
+            return {
+                'total_assignments': len(assignments),
+                'students': list(students_stats.values())
+            }
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения статистики класса: {e}")
+            return {'total_assignments': 0, 'students': []}
+        finally:
+            session.close()
+    
+    def toggle_assignment_active(self, assignment_id, teacher_id):
+        """Активация/деактивация задания"""
+        session = self.get_session()
+        try:
+            assignment = session.query(ClassAssignment).filter(
+                and_(
+                    ClassAssignment.id == assignment_id,
+                    ClassAssignment.teacher_id == teacher_id
+                )
+            ).first()
+            
+            if not assignment:
+                return False, "Задание не найдено"
+            
+            assignment.is_active = not assignment.is_active
+            session.commit()
+            
+            status = "активировано" if assignment.is_active else "деактивировано"
+            return True, f"Задание {status}"
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Ошибка изменения статуса задания: {e}")
+            return False, str(e)
+        finally:
+            session.close()
+
+
 db = Database()

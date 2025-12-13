@@ -1,12 +1,13 @@
-from langchain_ollama import OllamaLLM
-import re
-import enum
-import datetime
-import time
-import socket
-from bot.prompt_loader import load_prompt, load_prompt_with_format
+import re, os, sys
 
-class AIMode(enum.Enum):
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+from logger import console
+
+python_filename = "llm"
+
+class Mode:
     HELP_PROBLEM = "help_problem"
     EXPLAIN = "explain"
     TIPS = "tips"
@@ -31,157 +32,138 @@ class AIMode(enum.Enum):
     AREAS_VOLUMES = "areas_volumes"
     COORDINATE_GEOMETRY = "coordinate_geometry"
 
-class StudentCommands(enum.Enum):
-    """Команды меню ученика (текстовые ярлыки на кнопках)."""
-    PROFILE = "профиль"
-    APPLICATIONS = "заявки"
-    MY_TEACHERS = "мои учителя"
-    TASKS = "задания"
-    GET_TASKS = "получить задания"
-    SUBMIT_SOLUTION = "отправить решение"
-    DELETE_PROFILE = "удалить профиль"
-    AI_ASSISTANT = "ai помощник"
-    AI_HELP_WITH_PROBLEM = "помощь с задачей"
-    AI_EXPLAIN_THEORY = "объяснить теорию"
-    AI_TIPS = "получить советы"
-    AI_STUDY_PLAN = "план обучения"
-    AI_CHECK_SOLUTION = "проверить решение"
-    AI_PRACTICE = "практика"
 
-class TeacherCommands(enum.Enum):
-    """Команды меню учителя (текстовые ярлыки на кнопках)."""
-    PROFILE = "профиль"
-    ATTACH_CLASS = "прикрепить класс"
-    MY_STUDENTS = "мои учащиеся"
-    SEND_TASK = "отправить задание"
-    CHECK_TASKS = "проверить задания"
-    SEND_INDIVIDUAL_TASK = "отправить индивидуальное задание"
-    SEND_CLASS_TASK = "отправить задание классу"
-    CHECK_INDIVIDUAL_TASKS = "проверить индивидуальные задания"
-    CLASS_TASKS = "задания для класса"
-    DELETE_PROFILE = "удалить профиль"
-    AI_ASSISTANT = "ai помощник"
-    AI_CREATE_EXPLANATION = "создать объяснение"
-    AI_ANALYZE_STUDENT = "анализ студента"
-    AI_PERSONALIZED_TASK = "персонализированное задание"
-    AI_GENERATE_TASK = "сгенерировать задание"
-    AI_GENERATE_FOR_CLASS = "сгенерировать для класса"
-    AI_CHECK = "ai проверка"
-    ANALYZE_PROGRESS = "анализ прогресса"
-    ATTACH_ALL = "прикрепить всех"
+class Commands:
+    class Student:
+        PROFILE = "профиль"
+        APPLICATIONS = "заявки"
+        MY_TEACHERS = "мои учителя"
+        TASKS = "задания"
+        GET_TASKS = "получить задания"
+        SUBMIT_SOLUTION = "отправить решение"
+        DELETE_PROFILE = "удалить профиль"
+        AI_ASSISTANT = "ai помощник"
+        AI_HELP_WITH_PROBLEM = "помощь с задачей"
+        AI_EXPLAIN_THEORY = "объяснить теорию"
+        AI_TIPS = "получить советы"
+        AI_STUDY_PLAN = "план обучения"
+        AI_CHECK_SOLUTION = "проверить решение"
+        AI_PRACTICE = "практика"
+
+    class Teacher:
+        PROFILE = "профиль"
+        ATTACH_CLASS = "прикрепить класс"
+        MY_STUDENTS = "мои учащиеся"
+        SEND_TASK = "отправить задание"
+        CHECK_TASKS = "проверить задания"
+        SEND_INDIVIDUAL_TASK = "отправить индивидуальное задание"
+        SEND_CLASS_TASK = "отправить задание классу"
+        CHECK_INDIVIDUAL_TASKS = "проверить индивидуальные задания"
+        CLASS_TASKS = "задания для класса"
+        DELETE_PROFILE = "удалить профиль"
+        AI_ASSISTANT = "ai помощник"
+        AI_CREATE_EXPLANATION = "создать объяснение"
+        AI_ANALYZE_STUDENT = "анализ студента"
+        AI_PERSONALIZED_TASK = "персонализированное задание"
+        AI_GENERATE_TASK = "сгенерировать задание"
+        AI_GENERATE_FOR_CLASS = "сгенерировать для класса"
+        AI_CHECK = "ai проверка"
+        ANALYZE_PROGRESS = "анализ прогресса"
+        ATTACH_ALL = "прикрепить всех"
 
 
+MODE_TO_FILE = {
+    Mode.HELP_PROBLEM: "help_problem.txt",
+    Mode.EXPLAIN: "explain.txt",
+    Mode.TIPS: "tips.txt",
+    Mode.PLAN: "plan.txt",
+    Mode.CHECK_SOLUTION: "check_solution.txt",
+    Mode.PRACTICE: "practice.txt",
+    Mode.GENERATE_TASK: "generate_task.txt",
+    Mode.COMPUTATIONAL_SKILLS: "computational_skills.txt",
+    Mode.EXPRESSION_VALUE: "expression_value.txt",
+    Mode.FORMULAS_WORK: "formulas_work.txt",
+    Mode.SHORTHAND_FORMULAS: "shorthand_formulas.txt",
+    Mode.EQUATIONS: "equations.txt",
+    Mode.INEQUALITIES: "inequalities.txt",
+    Mode.GRAPHS: "graphs.txt",
+    Mode.TRIGONOMETRY: "trigonometry.txt",
+    Mode.PROBABILITY: "probability.txt",
+    Mode.TRIANGLES: "triangles.txt",
+    Mode.QUADRILATERALS: "quadrilaterals.txt",
+    Mode.CIRCLES: "circles.txt",
+    Mode.AREAS_VOLUMES: "areas_volumes.txt",
+    Mode.COORDINATE_GEOMETRY: "coordinate_geometry.txt"
+}
 
-class ResponseType(enum.Enum):
-    """Тип запрашиваемого ответа от модели."""
-    CALCULATION = enum.auto()  # Только числовой ответ
-    EXPLANATION = enum.auto()  # Развернутое объяснение
-    CONCISE = enum.auto()      # Краткий ответ
+class Prompt:
+    def __init__(self):
+        self.__prompt_template = "role: {role}\ntask: {task}\nanswer: {answer}"
+        self._prompt = ""
+        self.__role = ""
+        self.__task = ""
+        self.__answer = ""
+
+    @console.debug(python_filename)
+    def set_role(self, descripton: str) -> None:
+        self.__role = descripton
+
+    @console.debug(python_filename)
+    def set_task(self, description: str) -> None:
+        self.__task = description
+    
+    @console.debug(python_filename)
+    def set_answer(self, description: str) -> None:
+        self.__answer = description
+
+    @console.debug(python_filename)
+    def prompt(self):
+        self.__prompt = self.__prompt_template.format(role = self.__role, task = self.__task, answer = self.__answer)
+        return self.__prompt
+
+    @console.debug(python_filename)
+    def save(self, filepath):
+        with open(filepath, 'w', encoding="utf-8") as file:
+            file.write(self.prompt())
+
+    @console.debug(python_filename)
+    def load_role(self, filepath: str) -> None:
+        self.__role = self.__load(filepath)
+
+    @console.debug(python_filename)
+    def load_task(self, filepath: str) -> None:
+        self.__task = self.__load(filepath)
+
+    @console.debug(python_filename)
+    def load_answer(self, filepath: str) -> None:
+        self.__task = self.__load(filepath)
+
+    @console.debug(python_filename)
+    def __load(filepath: str) -> str:
+        with open(filepath, 'r', encoding="utf-8") as file:
+            return file.read()
 
 class LLM:
-    def _load_roles(self):
-        """Загружает роли из файлов промптов."""
-        return {
-            "math teacher": {
-                "base": load_prompt("role_base.txt"),
-                "calculation": load_prompt("role_calculation.txt"),
-                "explanation": load_prompt("role_explanation.txt"),
-                "concise": load_prompt("role_concise.txt")
-            }
-        }
+    def __init__(self, provider, model: str, **kwargs):
+        self.client = provider(model=model, **kwargs)
+        self.prompt = Prompt()
     
-    @property
-    def ROLES(self):
-        """Свойство для получения ролей (загружает из файлов при первом обращении)."""
-        if not hasattr(self, '_roles_cache'):
-            self._roles_cache = self._load_roles()
-        return self._roles_cache
-
-    def _check_ollama_server_available(self):
-        """Проверка доступности Ollama сервера через проверку порта"""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            result = sock.connect_ex(('localhost', 11434))
-            sock.close()
-            return result == 0
-        except Exception as e:
-            print(f"Ошибка проверки доступности Ollama сервера: {e}")
-            return False
+    @console.debug(python_filename)
+    def ask(self) -> str:
+        response = self.client.invoke(self.prompt)
+        return response
     
-    def __init__(self):
-        # Проверяем доступность сервера перед инициализацией
-        if not self._check_ollama_server_available():
-            print("Ollama сервер недоступен (порт 11434 не отвечает), LLM будет недоступен")
-            self.client = None
-            self.model_name = "deepseek-r1:7b"
-        else:
-            self.client = OllamaLLM(model="deepseek-r1:7b", 
-                temperature=0.0, 
-                num_thread = 1, 
-                num_ctx = 1000,
-                reasoning = False
-            )
-            self.model_name = "deepseek-r1:7b"
-            print("Используется модель: deepseek-r1:7b")
-            
-
-        self.role = ""
-        self.task = ""
-        self.prompt = ""
-        self.response_type = ResponseType.EXPLANATION  # По умолчанию объяснение
-        self.request_id = None  # Уникальный ID для отслеживания запросов
-
-    def _generate_request_id(self) -> str:
-        """Генерирует уникальный ID для запроса."""
-        return f"{int(time.time() * 1000)}"
-
-    def set_role(self, role: str) -> None:
-        """Устанавливает роль подсказки (поддерживается только 'math teacher')."""
-        if role not in self.ROLES:
-            raise ValueError("Unsupported model role selected")
-        self.role = self.ROLES[role]["base"]
-
-    def set_response_type(self, response_type: ResponseType) -> None:
-        """Меняет тип ответа модели (влияет на формирование промпта)."""
-        self.response_type = response_type
-
+    @console.debug(python_filename)
     def calculate(self, expression: str) -> str:
-        """Возвращает только числовой результат выражения, без пояснений."""
-        self.response_type = ResponseType.CALCULATION
-        expression = self._normalize_expression(expression)
-        self.task = f"Calculate: {expression}"
-        self._update_prompt()
-        return self.run()
-
-    def explain(self, topic: str) -> str:
-        """Пишет развернутое объяснение темы с примерами и шагами."""
-        self.response_type = ResponseType.EXPLANATION
-        self.task = f"Explain: {topic}"
-        self._update_prompt()
-        return self.run()
-
-    def ask(self, question: str) -> str:
-        """Даёт краткий ответ на вопрос."""
-        self.response_type = ResponseType.CONCISE
-        self.task = question
-        self._update_prompt()
-        return self.run()
-
-
-    def _update_prompt(self):
-        if self.response_type == ResponseType.CALCULATION:
-            instruction = self.ROLES["math teacher"]["calculation"]
-        elif self.response_type == ResponseType.EXPLANATION:
-            instruction = self.ROLES["math teacher"]["explanation"]
-        else:
-            instruction = self.ROLES["math teacher"]["concise"]
+        normalized = self._normalize_expression(expression)
+        prompt = f"Вычисли следующее выражение и дай только числовой ответ: {normalized}"
         
-        # Обновляем роль с инструкцией для лучшего контекста
-        self.role = f"{self.ROLES['math teacher']['base']} {instruction}"
-
+        response = self.ask(prompt)
+        result = self._extract_number(response)
+        return result
+    
+    @console.debug(python_filename)
     def _normalize_expression(self, expr: str) -> str:
-        """Нормализует текстовые описания операций в форму, понятную модели."""
         expr = expr.lower().strip()
         replacements = {
             "squared": "^2",
@@ -189,150 +171,26 @@ class LLM:
             "to the power of": "^",
             "square root of": "sqrt",
             "divided by": "/",
-            "times": "*"
+            "times": "*",
+            "в квадрате": "^2",
+            "в кубе": "^3",
+            "в степени": "^",
+            "корень из": "sqrt",
+            "делить на": "/",
+            "умножить на": "*",
+            "плюс": "+",
+            "минус": "-"
         }
         for k, v in replacements.items():
             expr = expr.replace(k, v)
         return expr
-
-    def run(self) -> str:
-        self.request_id = self._generate_request_id()
-        
-        try:
-            if self.client is None:
-                return "Ollama клиент недоступен. Проверьте настройки."
-            
-            full_prompt = f"{self.role}\n\nЗадача: {self.task}"
-            
-            request_params = {
-                "model": self.model_name,
-                "temperature": 0.3,
-                "prompt_length": len(full_prompt)
-            }
-            
-            start_time = datetime.datetime.now()
-            
-            # Используем метод invoke для OllamaLLM
-            response_text = self.client.invoke(full_prompt)
-            
-            end_time = datetime.datetime.now()
-            duration = (end_time - start_time).total_seconds()
-            
-            # Проверяем что ответ получен
-            if not response_text:
-                return "Получен пустой ответ от модели"
-            
-            if self.response_type == ResponseType.CALCULATION:
-                extracted = self._extract_number(response_text)
-                return extracted
-                
-            return response_text
-            
-        except Exception as e:
-            error_msg = f"Произошла ошибка при обращении к AI: {e}"
-            return error_msg
-
+    
+    @console.debug(python_filename)
     def _extract_number(self, text: str) -> str:
-        """Извлекает число из текста ответа"""
+        """Извлекает число из текста ответа."""
         matches = re.findall(r"-?\d+\.?\d*", text)
-        return matches[0] if matches else "Could not extract number"
+        return matches[0] if matches else text
 
-    def respond(self, mode: AIMode | None, user_text: str) -> str:
-        """Формирует промпт по режиму и возвращает ответ модели."""
-        
-        try:
-            prompt = self._build_prompt(mode, user_text)
-            
-            answer = self.ask(prompt)
-            
-            if mode == AIMode.GENERATE_TASK:
-                sanitized = self._sanitize_generated_task(answer)
-                return sanitized
-            
-            return answer
-        except Exception as e:
-            return "Произошла ошибка при обработке запроса AI"
-
-    @staticmethod
-    def _build_prompt(mode: AIMode | None, text: str) -> str:
-        """Создаёт промпт к LLM на основе выбранного режима AI."""
-        try:
-            # Маппинг режимов на имена файлов промптов
-            mode_to_file = {
-                AIMode.HELP_PROBLEM: "help_problem.txt",
-                AIMode.EXPLAIN: "explain.txt",
-                AIMode.TIPS: "tips.txt",
-                AIMode.PLAN: "plan.txt",
-                AIMode.CHECK_SOLUTION: "check_solution.txt",
-                AIMode.PRACTICE: "practice.txt",
-                AIMode.GENERATE_TASK: "generate_task.txt",
-                AIMode.COMPUTATIONAL_SKILLS: "computational_skills.txt",
-                AIMode.EXPRESSION_VALUE: "expression_value.txt",
-                AIMode.FORMULAS_WORK: "formulas_work.txt",
-                AIMode.SHORTHAND_FORMULAS: "shorthand_formulas.txt",
-                AIMode.EQUATIONS: "equations.txt",
-                AIMode.INEQUALITIES: "inequalities.txt",
-                AIMode.GRAPHS: "graphs.txt",
-                AIMode.TRIGONOMETRY: "trigonometry.txt",
-                AIMode.PROBABILITY: "probability.txt",
-                AIMode.TRIANGLES: "triangles.txt",
-                AIMode.QUADRILATERALS: "quadrilaterals.txt",
-                AIMode.CIRCLES: "circles.txt",
-                AIMode.AREAS_VOLUMES: "areas_volumes.txt",
-                AIMode.COORDINATE_GEOMETRY: "coordinate_geometry.txt"
-            }
-            
-            if mode and mode in mode_to_file:
-                filename = mode_to_file[mode]
-                return load_prompt_with_format(filename, text=text)
-            
-            return text
-        except Exception as e:
-            print(f"Ошибка формирования промпта в LLM: {e}")
-            return text
-
-    @staticmethod
-    def _sanitize_generated_task(raw_text: str) -> str:
-        """Возвращает из ответа LLM только условие задачи.
-
-        - Если есть строка, начинающаяся с 'Задача:', берём её и последующие строки до пустой строки.
-        - Удаляем блоки, начинающиеся с 'Решение', 'Пример', 'Вид', 'Answer', 'Program', 'Программа', 'Ответ'.
-        - Если 'Задача:' не найдено — берём первую содержательную строку и добавляем префикс 'Задача: '.
-        - Обрезаем до 3–4 строк максимум, чтобы избежать лишнего текста.
-        """
-        try:
-            lines = [ln.strip() for ln in raw_text.strip().splitlines()]
-            drop_prefixes = (
-                "решение", "пример", "вид", "answer", "program", "программа", "ответ"
-            )
-            filtered = []
-            skip = False
-            for ln in lines:
-                low = ln.lower()
-                if any(low.startswith(pfx) for pfx in drop_prefixes):
-                    skip = True
-                if skip:
-                    if ln == "":
-                        skip = False
-                    continue
-                filtered.append(ln)
-
-            start_idx = next((i for i, ln in enumerate(filtered) if ln.lower().startswith("задача:")), None)
-            if start_idx is not None:
-                result_block = []
-                for ln in filtered[start_idx:]:
-                    if ln == "":
-                        break
-                    result_block.append(ln)
-                result_block = result_block[:4]
-                return "\n".join(result_block) if result_block else filtered[start_idx]
-
-            first = next((ln for ln in filtered if ln), "")
-            if not first:
-                return "Не удалось сгенерировать задачу"
-            if not first.lower().startswith("задача:"):
-                first = f"Задача: {first}"
-            return first
-        except Exception as e:
-            print(f"Ошибка санитизации текста задачи в LLM: {e}")
-            return "Не удалось сгенерировать задачу"
+class AcademicLLM(LLM):
+    def __init__(self, provider, model: str, **kwargs):
+        super().__init__(provider, model, )

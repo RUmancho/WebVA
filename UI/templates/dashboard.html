@@ -4,7 +4,11 @@
 <nav class="navbar navbar-dark mb-4">
     <div class="container-fluid">
         <span class="navbar-brand mb-0 h1">🎓 {{ page_title }}</span>
-        <div>
+        <div class="d-flex align-items-center">
+            <button class="theme-toggle me-3" onclick="ThemeManager.toggle()" title="Переключить тему">
+                <i class="bi bi-sun-fill theme-icon-light"></i>
+                <i class="bi bi-moon-fill theme-icon-dark"></i>
+            </button>
             <span class="text-white me-3">Добро пожаловать, {{ user.first_name }}! 👋</span>
             <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">🚪 Выйти</a>
         </div>
@@ -45,6 +49,10 @@
                         onclick="showTab('home')" type="button">🏠 Главная</button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'assignments' %}active{% endif %}" 
+                        onclick="showTab('assignments')" type="button">📋 Задания</button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link {% if active_tab == 'teachers' %}active{% endif %}" 
                         onclick="showTab('teachers')" type="button">👨‍🏫 Учителя</button>
             </li>
@@ -82,13 +90,20 @@
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link {% if active_tab == 'lessons' %}active{% endif %}" 
-                        onclick="showTab('lessons')" type="button">🎥 Записи уроков</button>
+                        onclick="showTab('lessons')" type="button">🎥 Записи</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'settings' %}active{% endif %}" 
+                        onclick="showTab('settings')" type="button">⚙️ Настройки</button>
             </li>
         </ul>
         
         <div class="tab-content mt-4">
             <div id="home" class="tab-pane {% if active_tab == 'home' %}active{% endif %}">
                 {% include 'dashboard/home.html' %}
+            </div>
+            <div id="assignments" class="tab-pane {% if active_tab == 'assignments' %}active{% endif %}">
+                {% include 'dashboard/assignments.html' %}
             </div>
             <div id="teachers" class="tab-pane {% if active_tab == 'teachers' %}active{% endif %}">
                 {% include 'dashboard/teachers.html' %}
@@ -120,6 +135,9 @@
             <div id="lessons" class="tab-pane {% if active_tab == 'lessons' %}active{% endif %}">
                 {% include 'dashboard/lessons.html' %}
             </div>
+            <div id="settings" class="tab-pane {% if active_tab == 'settings' %}active{% endif %}">
+                {% include 'dashboard/settings.html' %}
+            </div>
         </div>
     </div>
 </div>
@@ -144,7 +162,13 @@ function showTab(tabName) {
     const url = new URL(window.location);
     url.searchParams.set('tab', tabName);
     window.history.pushState({}, '', url);
+    
+    // Инициализация специфичных вкладок
+    if (tabName === 'assignments') {
+        if (typeof initAssignments === 'function') initAssignments();
+    } else if (tabName === 'settings') {
+        if (typeof initSettings === 'function') initSettings();
+    }
 }
 </script>
 {% endblock %}
-

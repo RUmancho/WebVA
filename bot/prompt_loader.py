@@ -1,8 +1,17 @@
 from pathlib import Path
+import os, sys
+
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+from logger import console
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-def load_prompt(filename: str) -> str:
+python_filename = "prompt_loader"
+
+@console.debug(python_filename)
+def filereader(filename: str) -> str:
     """Загружает промпт из файла в папке prompts."""
     try:
         filepath = PROMPTS_DIR / filename
@@ -12,9 +21,10 @@ def load_prompt(filename: str) -> str:
         print(f"Ошибка загрузки промпта {filename}: {e}")
         return ""
 
+@console.debug(python_filename)
 def load_prompt_with_format(filename: str, **kwargs) -> str:
     """Загружает промпт из файла и форматирует его с переданными параметрами."""
-    prompt_template = load_prompt(filename)
+    prompt_template = filereader(filename)
     if not prompt_template:
         return ""
     
