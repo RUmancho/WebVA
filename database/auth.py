@@ -1,6 +1,6 @@
 from flask import session as flask_session
 from database.database import db
-from data_processor.validation import validator
+from validator.validation import Validator
 from database.settings import USER_ROLES, SESSION_STATE_KEY
 
 class AuthManager:

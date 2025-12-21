@@ -3,6 +3,13 @@
 Использует DLL генератор для математики и LLM для других предметов.
 """
 
+import os
+import sys
+
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from flask import session as flask_session
 import json
 import random
@@ -11,7 +18,9 @@ from typing import Optional, Dict, List, Any
 from bot.settings import OPENAI_API_KEY
 from bot.theory import TheoryManager
 from langchain_ollama import OllamaLLM
+from logger import console
 
+PYTHON_FILENAME = "testing"
 
 # Константы
 DEFAULT_MODEL = "deepseek-r1:7b"
@@ -56,6 +65,7 @@ class TestingManager:
         self._init_ollama()
         self._init_math_generator()
     
+    @console.debug(PYTHON_FILENAME)
     def _check_ollama(self) -> bool:
         """Проверка Ollama сервера"""
         try:
@@ -67,6 +77,7 @@ class TestingManager:
         except Exception:
             return False
     
+    @console.debug(PYTHON_FILENAME)
     def _init_ollama(self):
         """Инициализация Ollama"""
         if not self._check_ollama():
@@ -83,18 +94,20 @@ class TestingManager:
             except Exception:
                 print(f"✗ Ollama недоступен: {e}")
     
+    @console.debug(PYTHON_FILENAME)
     def _init_math_generator(self):
         """Инициализация математического генератора"""
         try:
-            from math_generator import get_math_generator
+            from task_generator import get_math_generator
             self.math_generator = get_math_generator()
             status = "DLL + Python" if self.math_generator.dll_available else "Python"
             print(f"✓ Математический генератор: {status}")
         except Exception as e:
             print(f"✗ Математический генератор: {e}")
     
-    def init_session(self):
-        """Инициализация сессии"""
+    @console.debug(PYTHON_FILENAME)
+    def init_testing_session(self):
+        """Инициализация сессии тестирования"""
         try:
             if 'testing_state' not in flask_session:
                 flask_session['testing_state'] = {
@@ -106,9 +119,10 @@ class TestingManager:
         except Exception as e:
             print(f"Ошибка инициализации сессии: {e}")
     
+    @console.debug(PYTHON_FILENAME)
     def show_testing_interface(self) -> Dict[str, Any]:
         """Главный интерфейс"""
-        self.init_session()
+        self.init_testing_session()
         state = flask_session.get('testing_state', {})
         return {
             'current_page': state.get('current_page', 'subjects'),
@@ -119,9 +133,10 @@ class TestingManager:
             'subjects': self.SUBJECTS_STRUCTURE
         }
     
+    @console.debug(PYTHON_FILENAME)
     def navigate_back(self):
         """Навигация назад"""
-        self.init_session()
+        self.init_testing_session()
         state = flask_session.get('testing_state', {})
         
         nav_map = {
@@ -136,15 +151,17 @@ class TestingManager:
             state['current_page'] = new_page
             state.update(updates)
     
+    @console.debug(PYTHON_FILENAME)
     def show_subjects(self) -> Dict[str, Any]:
         """Список предметов"""
-        self.init_session()
+        self.init_testing_session()
         return {'subjects': list(self.SUBJECTS_STRUCTURE.keys()), 'subjects_structure': self.SUBJECTS_STRUCTURE}
     
+    @console.debug(PYTHON_FILENAME)
     def show_sections(self, subject: str = None) -> Dict[str, Any]:
         """Разделы предмета"""
         if not subject:
-            self.init_session()
+            self.init_testing_session()
             subject = flask_session.get('testing_state', {}).get('selected_subject')
         
         if not subject or subject not in self.SUBJECTS_STRUCTURE:
@@ -156,10 +173,11 @@ class TestingManager:
             'sections': self.SUBJECTS_STRUCTURE[subject]["sections"]
         }
     
+    @console.debug(PYTHON_FILENAME)
     def show_topics(self, subject: str = None, section: str = None) -> Dict[str, Any]:
         """Темы раздела"""
         if not subject or not section:
-            self.init_session()
+            self.init_testing_session()
             state = flask_session.get('testing_state', {})
             subject = subject or state.get('selected_subject')
             section = section or state.get('selected_section')
@@ -177,9 +195,10 @@ class TestingManager:
             'topics': self.SUBJECTS_STRUCTURE[subject]["sections"][section]["topics"]
         }
     
+    @console.debug(PYTHON_FILENAME)
     def show_difficulty_selection(self) -> Dict[str, Any]:
         """Выбор сложности"""
-        self.init_session()
+        self.init_testing_session()
         state = flask_session.get('testing_state', {})
         subject = state.get('selected_subject')
         
@@ -195,6 +214,7 @@ class TestingManager:
             'difficulty_levels': DIFFICULTY_LEVELS
         }
     
+    @console.debug(PYTHON_FILENAME)
     def generate_test(self, subject: str, section: str, topic: str, difficulty: str) -> Optional[Dict[str, Any]]:
         """Генерация теста"""
         try:
@@ -213,6 +233,7 @@ class TestingManager:
             print(f"Ошибка генерации теста: {e}")
             return self._generate_local_test(subject, section, topic, difficulty)
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_math_test(self, topic: str, difficulty: str) -> Dict[str, Any]:
         """Тест по математике через DLL генератор"""
         questions = []
@@ -238,6 +259,7 @@ class TestingManager:
         
         return {"questions": questions[:NUM_QUESTIONS]}
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_options(self, correct: str) -> List[str]:
         """Генерация вариантов ответов"""
         import re
@@ -261,6 +283,7 @@ class TestingManager:
         random.shuffle(options)
         return options[:4]
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_llm_test(self, subject: str, section: str, topic: str, difficulty: str) -> Optional[Dict]:
         """Генерация через LLM"""
         try:
@@ -290,6 +313,7 @@ class TestingManager:
         
         return self._generate_local_test(subject, section, topic, difficulty)
     
+    @console.debug(PYTHON_FILENAME)
     def _get_local_math_question(self, topic: str) -> Optional[Dict]:
         """Локальные математические вопросы"""
         questions = {
@@ -304,6 +328,7 @@ class TestingManager:
         }
         return random.choice(questions.get(topic, [])) if topic in questions else None
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_local_test(self, subject: str, section: str, topic: str, difficulty: str) -> Dict:
         """Локальная генерация теста (fallback)"""
         local_tests = {
@@ -340,10 +365,11 @@ class TestingManager:
             for i in range(NUM_QUESTIONS)
         ]}
     
+    @console.debug(PYTHON_FILENAME)
     def calculate_results(self) -> Optional[Dict[str, Any]]:
         """Подсчёт результатов"""
         try:
-            self.init_session()
+            self.init_testing_session()
             state = flask_session.get('testing_state', {})
             test = state.get('current_test')
             answers = state.get('user_answers', {})
@@ -385,11 +411,13 @@ class TestingManager:
             print(f"Ошибка подсчёта: {e}")
             return None
     
+    @console.debug(PYTHON_FILENAME)
     def get_funny_comment(self, subject: str) -> str:
         """Смешной комментарий для предмета"""
         data = SUBJECT_DATA.get(subject, {"comments": ["Отлично! 🎉"]})
         return random.choice(data["comments"])
     
+    @console.debug(PYTHON_FILENAME)
     def show_celebration(self, subject: str, percentage: float) -> Dict[str, Any]:
         """Данные для празднования"""
         data = SUBJECT_DATA.get(subject, {"emojis": "🎉✨", "comments": ["Молодец!"]})

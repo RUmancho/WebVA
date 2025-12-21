@@ -3,7 +3,7 @@
 Использует DLL библиотеку algebra.dll для создания алгебраических примеров.
 """
 
-from math_generator.math_generator_wrapper import (
+from task_generator.math_generator_wrapper import (
     MathGeneratorWrapper,
     get_math_generator,
     generate_math_problem,

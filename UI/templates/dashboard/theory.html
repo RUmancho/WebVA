@@ -67,17 +67,57 @@ let theoryState = {
 
 // Загрузка состояния при открытии вкладки
 document.addEventListener('DOMContentLoaded', function() {
-    if (document.getElementById('theory-content')) {
-        loadTheoryState();
+    console.log('[Theory] DOM загружен, проверяем наличие контейнера...');
+    const theoryContent = document.getElementById('theory-content');
+    if (theoryContent) {
+        console.log('[Theory] Контейнер найден, загружаем состояние...');
+        // Проверяем, видна ли вкладка теории
+        const theoryTab = document.getElementById('theory');
+        if (theoryTab && theoryTab.classList.contains('active')) {
+            console.log('[Theory] Вкладка теории активна, загружаем данные...');
+            loadTheoryState();
+        } else {
+            console.log('[Theory] Вкладка теории не активна, ждем открытия...');
+        }
+    } else {
+        console.warn('[Theory] Контейнер theory-content не найден!');
+    }
+});
+
+// Также инициализируем при показе вкладки (на случай, если она была скрыта при DOMContentLoaded)
+const theoryObserver = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+            const theoryTab = document.getElementById('theory');
+            if (theoryTab && theoryTab.classList.contains('active')) {
+                const theoryContent = document.getElementById('theory-content');
+                if (theoryContent && !theoryContent.querySelector('#subjects-list').hasChildNodes()) {
+                    console.log('[Theory] Вкладка стала активной, загружаем данные...');
+                    loadTheoryState();
+                }
+            }
+        }
+    });
+});
+
+// Наблюдаем за изменениями вкладки теории
+document.addEventListener('DOMContentLoaded', function() {
+    const theoryTab = document.getElementById('theory');
+    if (theoryTab) {
+        theoryObserver.observe(theoryTab, { attributes: true });
     }
 });
 
 function loadTheoryState() {
+    // Сначала загружаем предметы
+    loadSubjects();
+    
+    // Затем проверяем состояние для восстановления навигации
     fetch('/api/theory/state')
         .then(r => r.json())
         .then(data => {
             if (data.error) {
-                showTheoryError(data.error);
+                console.warn('Ошибка загрузки состояния:', data.error);
                 return;
             }
             
@@ -88,10 +128,7 @@ function loadTheoryState() {
                 selectedTopic: data.selected_topic
             };
             
-            if (data.subjects) {
-                displaySubjects(data.subjects);
-            }
-            
+            // Восстанавливаем навигацию если есть сохраненное состояние
             if (theoryState.currentPage === 'sections' && theoryState.selectedSubject) {
                 loadSections(theoryState.selectedSubject);
             } else if (theoryState.currentPage === 'topics' && theoryState.selectedSubject && theoryState.selectedSection) {
@@ -101,43 +138,87 @@ function loadTheoryState() {
             }
         })
         .catch(err => {
-            console.error('Ошибка загрузки состояния:', err);
-            loadSubjects();
+            console.warn('Ошибка загрузки состояния:', err);
+            // Игнорируем ошибку, предметы уже загружены
         });
 }
 
 function loadSubjects() {
     showLoading(true);
+    console.log('[Theory] Загрузка предметов...');
     fetch('/api/theory/subjects')
-        .then(r => r.json())
+        .then(r => {
+            console.log('[Theory] Ответ от /api/theory/subjects:', r.status);
+            if (!r.ok) {
+                throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+            }
+            return r.json();
+        })
         .then(data => {
             showLoading(false);
+            console.log('[Theory] Данные предметов:', data);
             if (data.error) {
+                console.error('[Theory] Ошибка API:', data.error);
                 showTheoryError(data.error);
                 return;
             }
-            displaySubjects(data.subjects_structure || {});
+            // Используем subjects_structure если есть, иначе subjects
+            const subjectsData = data.subjects_structure || data.subjects || {};
+            console.log('[Theory] Отображаем предметы:', Object.keys(subjectsData));
+            if (Object.keys(subjectsData).length === 0) {
+                showTheoryError('Предметы не найдены. Проверьте структуру данных.');
+                return;
+            }
+            displaySubjects(subjectsData);
         })
         .catch(err => {
             showLoading(false);
-            showTheoryError('Ошибка загрузки предметов: ' + err);
+            console.error('[Theory] Ошибка загрузки предметов:', err);
+            showTheoryError('Ошибка загрузки предметов: ' + err.message);
         });
 }
 
 function displaySubjects(subjects) {
     const container = document.getElementById('subjects-list');
+    if (!container) {
+        console.error('[Theory] Контейнер subjects-list не найден!');
+        return;
+    }
+    
     container.innerHTML = '';
     
+    if (!subjects || typeof subjects !== 'object') {
+        console.error('[Theory] Некорректные данные предметов:', subjects);
+        showTheoryError('Ошибка: некорректные данные предметов');
+        return;
+    }
+    
     const subjectsList = Object.keys(subjects);
+    console.log('[Theory] Отображаем предметы:', subjectsList);
+    
+    if (subjectsList.length === 0) {
+        console.warn('[Theory] Список предметов пуст');
+        showTheoryError('Предметы не найдены');
+        return;
+    }
+    
     subjectsList.forEach(subject => {
         const subjectData = subjects[subject];
         const col = document.createElement('div');
         col.className = 'col-md-4 mb-3';
-        col.innerHTML = `
-            <button class="btn btn-outline-primary w-100 p-3" onclick="selectSubject('${subject}')">
-                <h5>${subjectData.icon || '📚'} ${subject}</h5>
-            </button>
-        `;
+        
+        const icon = (subjectData && subjectData.icon) ? subjectData.icon : '📚';
+        
+        // Создаем кнопку с обработчиком события
+        const button = document.createElement('button');
+        button.className = 'btn btn-outline-primary w-100 p-3';
+        button.innerHTML = `<h5>${icon} ${subject}</h5>`;
+        button.onclick = function() {
+            console.log('[Theory] Клик по предмету:', subject);
+            selectSubject(subject);
+        };
+        
+        col.appendChild(button);
         container.appendChild(col);
     });
     
@@ -146,6 +227,7 @@ function displaySubjects(subjects) {
 }
 
 function selectSubject(subject) {
+    console.log('[Theory] Выбран предмет:', subject);
     theoryState.selectedSubject = subject;
     theoryState.currentPage = 'sections';
     loadSections(subject);
@@ -153,19 +235,37 @@ function selectSubject(subject) {
 
 function loadSections(subject) {
     showLoading(true);
-    fetch(`/api/theory/sections?subject=${encodeURIComponent(subject)}`)
-        .then(r => r.json())
+    console.log('[Theory] Загрузка разделов для предмета:', subject);
+    const url = `/api/theory/sections?subject=${encodeURIComponent(subject)}`;
+    console.log('[Theory] URL запроса:', url);
+    fetch(url)
+        .then(r => {
+            console.log('[Theory] Ответ от /api/theory/sections:', r.status);
+            if (!r.ok) {
+                throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+            }
+            return r.json();
+        })
         .then(data => {
             showLoading(false);
+            console.log('[Theory] Данные разделов:', data);
             if (data.error) {
+                console.error('[Theory] Ошибка API:', data.error);
                 showTheoryError(data.error);
                 return;
             }
-            displaySections(subject, data.sections || {});
+            const sections = data.sections || {};
+            console.log('[Theory] Отображаем разделы:', Object.keys(sections));
+            if (Object.keys(sections).length === 0) {
+                showTheoryError('Разделы не найдены для предмета: ' + subject);
+                return;
+            }
+            displaySections(subject, sections);
         })
         .catch(err => {
             showLoading(false);
-            showTheoryError('Ошибка загрузки разделов: ' + err);
+            console.error('[Theory] Ошибка загрузки разделов:', err);
+            showTheoryError('Ошибка загрузки разделов: ' + err.message);
         });
 }
 

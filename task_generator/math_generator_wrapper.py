@@ -4,8 +4,18 @@
 """
 
 import os
+import sys
 import random
 from typing import Optional, Dict, Any
+from math import gcd
+
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from logger import console
+
+PYTHON_FILENAME = "math_generator"
 
 # Константы сложности
 DIFFICULTY_EASY = 1
@@ -50,6 +60,7 @@ class MathGeneratorWrapper:
         self.dll_available = False
         self._init_dll()
     
+    @console.debug(PYTHON_FILENAME)
     def _init_dll(self):
         """Инициализация DLL библиотеки."""
         try:
@@ -79,6 +90,7 @@ class MathGeneratorWrapper:
         except Exception as e:
             print(f"[WARNING] Ошибка инициализации DLL: {e}")
     
+    @console.debug(PYTHON_FILENAME)
     def _string_from_c(self, c_string) -> str:
         """Преобразование C-строки в Python строку."""
         if not self.ffi or c_string == self.ffi.NULL:
@@ -94,10 +106,12 @@ class MathGeneratorWrapper:
         except Exception:
             return ""
     
+    @console.debug(PYTHON_FILENAME)
     def is_topic_supported(self, topic: str) -> bool:
         """Проверка поддержки темы."""
         return topic in TOPIC_TO_PROBLEM_TYPE
     
+    @console.debug(PYTHON_FILENAME)
     def generate_problem_by_topic(self, topic: str, difficulty: str = "Средний") -> Optional[Dict[str, Any]]:
         """
         Генерация задачи по теме.
@@ -117,6 +131,7 @@ class MathGeneratorWrapper:
         
         return self.generate_problem(problem_type, diff_level)
     
+    @console.debug(PYTHON_FILENAME)
     def generate_problem(self, problem_type: str, difficulty: int = DIFFICULTY_MEDIUM) -> Optional[Dict[str, Any]]:
         """
         Генерация математической задачи.
@@ -133,6 +148,7 @@ class MathGeneratorWrapper:
         
         return self._generate_fallback(problem_type, difficulty)
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_with_dll(self, problem_type: str, difficulty: int) -> Optional[Dict[str, Any]]:
         """Генерация через DLL."""
         try:
@@ -157,6 +173,7 @@ class MathGeneratorWrapper:
         
         return self._generate_fallback(problem_type, difficulty)
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_fallback(self, problem_type: str, difficulty: int) -> Dict[str, Any]:
         """Fallback генерация на Python."""
         if problem_type == "linear_equation":
@@ -172,6 +189,7 @@ class MathGeneratorWrapper:
         
         return self._generate_linear_equation(difficulty)
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_linear_equation(self, difficulty: int) -> Dict[str, Any]:
         """Генерация линейного уравнения."""
         if difficulty == DIFFICULTY_EASY:
@@ -191,15 +209,13 @@ class MathGeneratorWrapper:
             x = random.randint(-10, 10)
             b = random.randint(1, 20)
             c = random.randint(1, 20)
-            left = a * x + b
-            right = d * x + c
             return {"question": f"Решите: {a}x + {b} = {d}x + {c}", "correct_answer": f"x = {x}"}
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_quadratic_equation(self, difficulty: int) -> Dict[str, Any]:
         """Генерация квадратного уравнения."""
         x1 = random.randint(1, 5)
         x2 = random.randint(-5, 5)
-        a = 1
         b = -(x1 + x2)
         c = x1 * x2
         
@@ -223,6 +239,7 @@ class MathGeneratorWrapper:
         
         return {"question": f"Решите: {equation}", "correct_answer": answer}
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_fraction(self, difficulty: int) -> Dict[str, Any]:
         """Генерация задачи на дроби."""
         a = random.randint(1, 5)
@@ -235,7 +252,6 @@ class MathGeneratorWrapper:
         denominator = b * d
         
         # Упрощаем
-        from math import gcd
         g = gcd(numerator, denominator)
         numerator //= g
         denominator //= g
@@ -247,6 +263,7 @@ class MathGeneratorWrapper:
         
         return {"question": f"Вычислите: {a}/{b} + {c}/{d}", "correct_answer": answer}
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_power(self, difficulty: int) -> Dict[str, Any]:
         """Генерация задачи на степени."""
         base = random.randint(2, 5)
@@ -255,6 +272,7 @@ class MathGeneratorWrapper:
         
         return {"question": f"Вычислите: {base}^{exp}", "correct_answer": str(result)}
     
+    @console.debug(PYTHON_FILENAME)
     def _generate_root(self, difficulty: int) -> Dict[str, Any]:
         """Генерация задачи на корни."""
         answer = random.randint(2, 12)
@@ -267,6 +285,7 @@ class MathGeneratorWrapper:
 _generator_instance = None
 
 
+@console.debug(PYTHON_FILENAME)
 def get_math_generator() -> MathGeneratorWrapper:
     """Получить экземпляр генератора."""
     global _generator_instance
@@ -275,12 +294,13 @@ def get_math_generator() -> MathGeneratorWrapper:
     return _generator_instance
 
 
+@console.debug(PYTHON_FILENAME)
 def generate_math_problem(problem_type: str, difficulty: int = DIFFICULTY_MEDIUM) -> Optional[Dict[str, Any]]:
     """Сгенерировать математическую задачу."""
     return get_math_generator().generate_problem(problem_type, difficulty)
 
 
+@console.debug(PYTHON_FILENAME)
 def is_math_generator_available() -> bool:
     """Проверить доступность DLL генератора."""
     return get_math_generator().dll_available
-

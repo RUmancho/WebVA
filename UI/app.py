@@ -160,7 +160,7 @@ def register():
         return redirect(url_for('dashboard'))
     
     if request.method == 'POST':
-        from data_processor.validation import validator
+        from validator.validation import Validator as validator
         
         registration_data = {
             'email': request.form.get('email', '').strip().lower(),
@@ -729,14 +729,21 @@ def api_theory_subjects():
         return jsonify({'error': 'Не авторизован'}), 401
     
     try:
+        print(f"[API] Запрос на получение предметов")
         theory_manager.init_theory_session()
         data = theory_manager.show_theory_interface()
+        subjects_structure = data.get('subjects', {})
+        subjects_list = list(subjects_structure.keys())
+        print(f"[API] Найдено предметов: {len(subjects_list)}")
+        print(f"[API] Предметы: {subjects_list}")
         return jsonify({
-            'subjects': list(data.get('subjects', {}).keys()),
-            'subjects_structure': data.get('subjects', {})
+            'subjects': subjects_list,
+            'subjects_structure': subjects_structure
         })
     except Exception as e:
-        print(f"Ошибка получения предметов: {e}")
+        print(f"[API ERROR] Ошибка получения предметов: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/theory/sections', methods=['GET'])
@@ -747,7 +754,9 @@ def api_theory_sections():
     
     try:
         subject = request.args.get('subject')
+        print(f"[API] Запрос на получение разделов для предмета: {subject}")
         if not subject:
+            print(f"[API ERROR] Предмет не указан")
             return jsonify({'error': 'Предмет не указан'}), 400
         
         # Сохраняем в сессию
@@ -759,15 +768,20 @@ def api_theory_sections():
         
         # Получаем разделы напрямую из структуры
         if subject not in theory_manager.SUBJECTS_STRUCTURE:
+            print(f"[API ERROR] Предмет '{subject}' не найден в структуре")
+            print(f"[API] Доступные предметы: {list(theory_manager.SUBJECTS_STRUCTURE.keys())}")
             return jsonify({'error': f'Предмет "{subject}" не найден'}), 400
         
         sections = theory_manager.SUBJECTS_STRUCTURE[subject]["sections"]
+        sections_list = list(sections.keys())
+        print(f"[API] Найдено разделов: {len(sections_list)}")
+        print(f"[API] Разделы: {sections_list}")
         return jsonify({
             'subject': subject,
             'sections': sections
         })
     except Exception as e:
-        print(f"Ошибка получения разделов: {e}")
+        print(f"[API ERROR] Ошибка получения разделов: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -824,7 +838,10 @@ def api_theory_explanation():
         topic = data.get('topic')
         regenerate = data.get('regenerate', False)
         
+        print(f"[API] Запрос на генерацию теории: subject={subject}, section={section}, topic={topic}, regenerate={regenerate}")
+        
         if not all([subject, section, topic]):
+            print(f"[API ERROR] Не все параметры указаны: subject={subject}, section={section}, topic={topic}")
             return jsonify({'error': 'Не все параметры указаны'}), 400
         
         session['theory_state'] = session.get('theory_state', {})
@@ -835,9 +852,12 @@ def api_theory_explanation():
         
         if regenerate:
             session['theory_state']['explanation_text'] = None
+            print(f"[API] Режим перегенерации включен")
         
         # Генерируем объяснение
+        print(f"[API] Вызываем theory_manager.get_topic_explanation()...")
         explanation = theory_manager.get_topic_explanation(subject, section, topic, regenerate=regenerate)
+        print(f"[API] Получено объяснение, длина: {len(explanation) if explanation else 0} символов")
         
         return jsonify({
             'success': True,
@@ -847,7 +867,9 @@ def api_theory_explanation():
             'topic': topic
         })
     except Exception as e:
-        print(f"Ошибка генерации объяснения: {e}")
+        print(f"[API ERROR] Ошибка генерации объяснения: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/theory/state', methods=['GET'])
