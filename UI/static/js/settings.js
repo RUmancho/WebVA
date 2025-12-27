@@ -1,0 +1,151 @@
+// Настройки
+function initSettings() {
+    loadSettings();
+}
+
+// Загрузка настроек
+async function loadSettings() {
+    // Загружаем из localStorage
+    const theme = localStorage.getItem('theme') || 'light';
+    const fontSize = localStorage.getItem('fontSize') || 'medium';
+    const notificationsEnabled = localStorage.getItem('notificationsEnabled') !== 'false';
+    const soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
+    
+    // Устанавливаем значения
+    document.querySelector(`input[name="themeOption"][value="${theme}"]`).checked = true;
+    document.getElementById('fontSizeSelect').value = fontSize;
+    document.getElementById('notificationsEnabled').checked = notificationsEnabled;
+    document.getElementById('soundEnabled').checked = soundEnabled;
+    
+    // Пробуем загрузить с сервера
+    try {
+        const response = await fetch('/api/settings');
+        const data = await response.json();
+        
+        if (data.settings) {
+            document.querySelector(`input[name="themeOption"][value="${data.settings.theme}"]`).checked = true;
+            document.getElementById('fontSizeSelect').value = data.settings.font_size;
+            document.getElementById('notificationsEnabled').checked = data.settings.notifications_enabled;
+            document.getElementById('soundEnabled').checked = data.settings.sound_enabled;
+            
+            // Применяем тему
+            ThemeManager.setTheme(data.settings.theme);
+        }
+    } catch (e) {
+        console.log('Использование локальных настроек');
+    }
+}
+
+// Сохранение настроек
+async function saveSettings() {
+    const theme = document.querySelector('input[name="themeOption"]:checked').value;
+    const fontSize = document.getElementById('fontSizeSelect').value;
+    const notificationsEnabled = document.getElementById('notificationsEnabled').checked;
+    const soundEnabled = document.getElementById('soundEnabled').checked;
+    
+    // Сохраняем локально
+    localStorage.setItem('theme', theme);
+    localStorage.setItem('fontSize', fontSize);
+    localStorage.setItem('notificationsEnabled', notificationsEnabled);
+    localStorage.setItem('soundEnabled', soundEnabled);
+    
+    // Применяем тему
+    ThemeManager.setTheme(theme);
+    
+    // Применяем размер шрифта
+    applyFontSize(fontSize);
+    
+    // Сохраняем на сервере
+    try {
+        const response = await fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                theme,
+                font_size: fontSize,
+                notifications_enabled: notificationsEnabled,
+                sound_enabled: soundEnabled
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showToast('✅ Настройки сохранены', 'success');
+        }
+    } catch (e) {
+        showToast('⚠️ Настройки сохранены локально', 'warning');
+    }
+}
+
+// Сброс настроек
+async function resetSettings() {
+    if (!confirm('Вы уверены, что хотите сбросить все настройки?')) {
+        return;
+    }
+    
+    // Сбрасываем локально
+    localStorage.removeItem('theme');
+    localStorage.removeItem('fontSize');
+    localStorage.removeItem('notificationsEnabled');
+    localStorage.removeItem('soundEnabled');
+    
+    // Устанавливаем значения по умолчанию
+    document.querySelector('input[name="themeOption"][value="light"]').checked = true;
+    document.getElementById('fontSizeSelect').value = 'medium';
+    document.getElementById('notificationsEnabled').checked = true;
+    document.getElementById('soundEnabled').checked = true;
+    
+    // Применяем
+    ThemeManager.setTheme('light');
+    applyFontSize('medium');
+    
+    // Сбрасываем на сервере
+    try {
+        await fetch('/api/settings/reset', { method: 'POST' });
+        showToast('🔄 Настройки сброшены', 'info');
+    } catch (e) {
+        showToast('🔄 Настройки сброшены локально', 'info');
+    }
+}
+
+// Применение размера шрифта
+function applyFontSize(size) {
+    const sizes = {
+        'small': '14px',
+        'medium': '16px',
+        'large': '18px'
+    };
+    document.body.style.fontSize = sizes[size] || '16px';
+}
+
+// Toast уведомление
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type} position-fixed top-0 end-0 m-3`;
+    toast.style.zIndex = '9999';
+    toast.innerHTML = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// Обработчики изменения темы
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('input[name="themeOption"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            ThemeManager.setTheme(this.value);
+        });
+    });
+    
+    // Обработчик изменения размера шрифта
+    const fontSizeSelect = document.getElementById('fontSizeSelect');
+    if (fontSizeSelect) {
+        fontSizeSelect.addEventListener('change', function() {
+            applyFontSize(this.value);
+        });
+    }
+    
+    // Инициализация при загрузке
+    initSettings();
+});
+

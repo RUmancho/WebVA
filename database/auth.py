@@ -5,7 +5,6 @@ from database.settings import USER_ROLES, SESSION_STATE_KEY
 
 class AuthManager:
     """Класс для управления аутентификацией и регистрацией"""
-    
     @staticmethod
     def _get_session():
         """Получение объекта сессии Flask"""

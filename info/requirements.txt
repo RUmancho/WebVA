@@ -1,5 +1,0 @@
-sqlalchemy
-flask
-langchain-ollama
-cffi
-openai

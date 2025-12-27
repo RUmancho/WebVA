@@ -143,28 +143,6 @@ class LLM:
             return ""
     
     @console.debug(python_filename)
-    def ask_with_params(self, prompt: Prompt, **params) -> str:
-        """
-        Отправить промпт с подстановкой параметров.
-        
-        Args:
-            prompt: Экземпляр Prompt
-            **params: Параметры для подстановки (n=5, text="тема")
-        
-        Returns:
-            str: Ответ от LLM
-        """
-        try:
-            prompt_text = prompt.prompt()
-            for key, value in params.items():
-                prompt_text = prompt_text.replace("{" + key + "}", str(value))
-            response = self.client.invoke(prompt_text)
-            return response
-        except Exception as e:
-            print(f"[ERROR] Ошибка при запросе к LLM: {e}")
-            return ""
-    
-    @console.debug(python_filename)
     def calculate(self, expression: str) -> str:
         normalized = self._normalize_expression(expression)
         prompt = f"Вычисли следующее выражение и дай только числовой ответ: {normalized}"

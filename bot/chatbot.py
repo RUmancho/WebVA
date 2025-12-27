@@ -1,7 +1,3 @@
-"""
-Модуль чат-бота для веб-интерфейса.
-"""
-
 import os
 import sys
 import re
@@ -12,50 +8,18 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from logger import console
+from bot import chat  # Импортируем модуль с готовым LLM
+from bot.llm import Prompt
+from bot.prompts import Math
 
 PYTHON_FILENAME = "chatbot"
-
-try:
-    import langchain_ollama
-    from bot.llm import LLM, Prompt
-    from bot.prompts import Math
-    LLM_AVAILABLE = True
-except ImportError as e:
-    print(f"[WARNING] LLM модули недоступны: {e}")
-    LLM_AVAILABLE = False
-
-# ========================== НАСТРОЙКИ ==========================
-
-MODEL_NAME = "deepseek-r1:7b"
-NUM_THREADS = 1
-TEMPERATURE = 0.0
 
 
 class ChatBot:
     """Чат-бот для взаимодействия с пользователем."""
     
     def __init__(self):
-        self.llm = None
-        self._init_llm()
-    
-    @console.debug(PYTHON_FILENAME)
-    def _init_llm(self):
-        """Инициализация LLM."""
-        if not LLM_AVAILABLE:
-            print("[WARNING] LLM недоступен, используется заглушка")
-            return
-        
-        try:
-            self.llm = LLM(
-                langchain_ollama.OllamaLLM,
-                MODEL_NAME,
-                num_thread=NUM_THREADS,
-                temperature=TEMPERATURE
-            )
-            print(f"[INFO] LLM инициализирован: {MODEL_NAME}")
-        except Exception as e:
-            print(f"[ERROR] Ошибка инициализации LLM: {e}")
-            self.llm = None
+        self.llm = chat.academic
     
     @console.debug(PYTHON_FILENAME)
     def init_chat_session(self):
@@ -96,9 +60,6 @@ class ChatBot:
         Returns:
             str: Ответ бота
         """
-        if not self.llm:
-            return self._get_fallback_response(user_message)
-        
         try:
             # Создаём промпт для чата
             prompt = Prompt(
@@ -114,8 +75,7 @@ class ChatBot:
             
             return response if response else self._get_fallback_response(user_message)
             
-        except Exception as e:
-            print(f"[ERROR] Ошибка получения ответа от LLM: {e}")
+        except Exception:
             return self._get_fallback_response(user_message)
     
     @console.debug(PYTHON_FILENAME)
@@ -144,7 +104,7 @@ class ChatBot:
         if any(word in user_lower for word in ['спасибо', 'благодар']):
             return "Рад помочь! Если есть ещё вопросы - спрашивайте."
         
-        return "Извините, в данный момент AI-модель недоступна. Попробуйте позже или обратитесь к разделам Теория и Тестирование."
+        return "Извините, произошла ошибка. Попробуйте переформулировать вопрос."
     
     @console.debug(PYTHON_FILENAME)
     def explain_theory(self, topic: str) -> str:
@@ -157,9 +117,6 @@ class ChatBot:
         Returns:
             str: Объяснение теории
         """
-        if not self.llm:
-            return "LLM недоступен для генерации теории."
-        
         topics_map = {
             "linear_equations": Math.Theory.linear_equations,
             "quadratic_equations": Math.Theory.quadratic_equations,
@@ -186,77 +143,7 @@ class ChatBot:
             response = self.llm.ask(prompt)
             return self._clean_response(response)
         except Exception as e:
-            print(f"[ERROR] Ошибка генерации теории: {e}")
             return f"Ошибка генерации теории: {e}"
-    
-    @console.debug(PYTHON_FILENAME)
-    def generate_tasks(self, topic: str, difficulty: str, n: int) -> str:
-        """
-        Сгенерировать задания по теме.
-        
-        Args:
-            topic: Название темы
-            difficulty: Уровень сложности (easy, standard, hard)
-            n: Количество заданий
-        
-        Returns:
-            str: Сгенерированные задания
-        """
-        if not self.llm:
-            return "LLM недоступен для генерации заданий."
-        
-        easy_topics = {
-            "linear_equations": Math.Test.Easy.linear_equations,
-            "fractions": Math.Test.Easy.fractions,
-            "percentages": Math.Test.Easy.percentages,
-            "powers": Math.Test.Easy.powers,
-            "roots": Math.Test.Easy.roots,
-            "arithmetic": Math.Test.Easy.arithmetic,
-        }
-        
-        standard_topics = {
-            "linear_equations": Math.Test.Standard.linear_equations,
-            "quadratic_equations": Math.Test.Standard.quadratic_equations,
-            "fractions": Math.Test.Standard.fractions,
-            "systems_of_equations": Math.Test.Standard.systems_of_equations,
-            "inequalities": Math.Test.Standard.inequalities,
-            "word_problems": Math.Test.Standard.word_problems,
-            "geometry": Math.Test.Standard.geometry,
-            "trigonometry": Math.Test.Standard.trigonometry,
-            "probability": Math.Test.Standard.probability,
-        }
-        
-        hard_topics = {
-            "algebra": Math.Test.Hard.algebra,
-            "geometry": Math.Test.Hard.geometry,
-            "combinatorics": Math.Test.Hard.combinatorics,
-            "number_theory": Math.Test.Hard.number_theory,
-            "logic": Math.Test.Hard.logic,
-            "functions": Math.Test.Hard.functions,
-            "inequalities": Math.Test.Hard.inequalities,
-            "sequences": Math.Test.Hard.sequences,
-        }
-        
-        difficulty_map = {
-            "easy": easy_topics,
-            "standard": standard_topics,
-            "hard": hard_topics,
-        }
-        
-        topics = difficulty_map.get(difficulty)
-        if not topics:
-            return f"Неизвестная сложность: {difficulty}"
-        
-        prompt = topics.get(topic)
-        if not prompt:
-            return f"Неизвестная тема для уровня {difficulty}: {topic}"
-        
-        try:
-            response = self.llm.ask_with_params(prompt, n=n)
-            return self._clean_response(response)
-        except Exception as e:
-            print(f"[ERROR] Ошибка генерации заданий: {e}")
-            return f"Ошибка генерации заданий: {e}"
 
 
 # Глобальный экземпляр чат-бота

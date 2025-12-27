@@ -16,19 +16,16 @@ class Database:
             self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
             self.Session = scoped_session(self.SessionLocal)
             self.init_database()
-            print("База данных успешно инициализирована с SQLAlchemy")
-        except Exception as e:
-            print(f"Ошибка инициализации базы данных: {e}")
+        except Exception:
+            pass
     
     def init_database(self):
         """Создание таблиц в базе данных"""
         try:
             Base.metadata.create_all(bind=self.engine)
-            # Обновление схемы для существующих таблиц
             self.update_database_schema()
             return True
-        except SQLAlchemyError as e:
-            print(f"Ошибка создания таблиц: {e}")
+        except SQLAlchemyError:
             return False
     
     def update_database_schema(self):
@@ -55,13 +52,11 @@ class Database:
                 if 'is_online' not in columns:
                     try:
                         conn.execute(text("ALTER TABLE users ADD COLUMN is_online BOOLEAN DEFAULT 0"))
-                        print("Столбец is_online успешно добавлен в таблицу users")
-                    except Exception as e:
-                        print(f"Ошибка добавления столбца is_online: {e}")
+                    except Exception:
                         raise
                         
-        except Exception as e:
-            print(f"Ошибка обновления схемы базы данных: {e}")
+        except Exception:
+            pass
     
     def get_session(self):
         """Получение сессии базы данных"""
@@ -75,7 +70,7 @@ class Database:
         """Регистрация нового пользователя"""
         session = self.get_session()
         try:
-            # Нормализация email (приведение к нижнему регистру и удаление пробелов)
+            # Нормализация email 
             email = user_data['email'].strip().lower() if user_data.get('email') else ''
             
             if not email:

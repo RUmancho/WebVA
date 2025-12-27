@@ -70,11 +70,9 @@ class MathGeneratorWrapper:
             header_path = os.path.join(os.path.dirname(__file__), "algebra.h")
             
             if not os.path.exists(dll_path):
-                print(f"[WARNING] DLL не найден: {dll_path}")
                 return
             
             if not os.path.exists(header_path):
-                print(f"[WARNING] Header не найден: {header_path}")
                 return
             
             self.ffi = cffi.FFI()
@@ -86,9 +84,9 @@ class MathGeneratorWrapper:
             self.dll_available = True
             
         except ImportError:
-            print("[WARNING] cffi не установлен")
-        except Exception as e:
-            print(f"[WARNING] Ошибка инициализации DLL: {e}")
+            pass
+        except Exception:
+            pass
     
     @console.debug(PYTHON_FILENAME)
     def _string_from_c(self, c_string) -> str:

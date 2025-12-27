@@ -1,32 +1,27 @@
 """
 Модуль управления системой тестирования.
-Использует DLL генератор для математики и LLM для других предметов.
+Использует DLL генератор для математики и LLM (deepseek-r1:7b) для других предметов.
 """
 
 import os
 import sys
+import json
+import random
+import re
+from typing import Optional, Dict, List, Any
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from flask import session as flask_session
-import json
-import random
-import socket
-from typing import Optional, Dict, List, Any
-from bot.settings import OPENAI_API_KEY
-from bot.theory import TheoryManager
-from langchain_ollama import OllamaLLM
+from bot import chat  # Импортируем модуль с готовым LLM
+from bot import topics
 from logger import console
 
 PYTHON_FILENAME = "testing"
 
 # Константы
-DEFAULT_MODEL = "deepseek-r1:7b"
-FALLBACK_MODEL = "deepseek:7b"
-OLLAMA_PORT = 11434
-OLLAMA_HOST = "localhost"
 NUM_QUESTIONS = 5
 
 # Уровни сложности
@@ -36,7 +31,7 @@ DIFFICULTY_LEVELS = {
     "Хардкор": {"icon": "🔴", "description": "Сложные вопросы", "style": "сложные вопросы"}
 }
 
-# Стикеры для предметов (сокращённо)
+# Стикеры для предметов
 SUBJECT_DATA = {
     "Алгебра": {"emojis": "🔢➕➖✖️➗", "comments": ["Икс найден! 🕵️", "Формулы покорены! 💪"]},
     "Геометрия": {"emojis": "📐📏🔺⬜", "comments": ["Теорема доказана! 👑", "Углы покорены! 🔺"]},
@@ -56,43 +51,9 @@ class TestingManager:
     """Менеджер тестирования"""
     
     def __init__(self):
-        self.api_key = OPENAI_API_KEY
-        self.theory_manager = TheoryManager()
-        self.SUBJECTS_STRUCTURE = self.theory_manager.SUBJECTS_STRUCTURE
-        self.ollama_client = None
+        self.SUBJECTS_STRUCTURE = topics.SUBJECTS_STRUCTURE
         self.math_generator = None
-        
-        self._init_ollama()
         self._init_math_generator()
-    
-    @console.debug(PYTHON_FILENAME)
-    def _check_ollama(self) -> bool:
-        """Проверка Ollama сервера"""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            result = sock.connect_ex((OLLAMA_HOST, OLLAMA_PORT))
-            sock.close()
-            return result == 0
-        except Exception:
-            return False
-    
-    @console.debug(PYTHON_FILENAME)
-    def _init_ollama(self):
-        """Инициализация Ollama"""
-        if not self._check_ollama():
-            print("Ollama недоступен, тесты будут генерироваться локально")
-            return
-        
-        try:
-            self.ollama_client = OllamaLLM(model=DEFAULT_MODEL, temperature=0.7, reasoning=False)
-            print(f"✓ Ollama: {DEFAULT_MODEL}")
-        except Exception as e:
-            try:
-                self.ollama_client = OllamaLLM(model=FALLBACK_MODEL, temperature=0.7)
-                print(f"✓ Ollama fallback: {FALLBACK_MODEL}")
-            except Exception:
-                print(f"✗ Ollama недоступен: {e}")
     
     @console.debug(PYTHON_FILENAME)
     def _init_math_generator(self):
@@ -100,10 +61,8 @@ class TestingManager:
         try:
             from task_generator import get_math_generator
             self.math_generator = get_math_generator()
-            status = "DLL + Python" if self.math_generator.dll_available else "Python"
-            print(f"✓ Математический генератор: {status}")
-        except Exception as e:
-            print(f"✗ Математический генератор: {e}")
+        except Exception:
+            pass
     
     @console.debug(PYTHON_FILENAME)
     def init_testing_session(self):
@@ -116,8 +75,8 @@ class TestingManager:
                     'selected_difficulty': None, 'current_test': None,
                     'user_answers': {}, 'test_results': None, 'current_question': 0
                 }
-        except Exception as e:
-            print(f"Ошибка инициализации сессии: {e}")
+        except Exception:
+            pass
     
     @console.debug(PYTHON_FILENAME)
     def show_testing_interface(self) -> Dict[str, Any]:
@@ -218,19 +177,17 @@ class TestingManager:
     def generate_test(self, subject: str, section: str, topic: str, difficulty: str) -> Optional[Dict[str, Any]]:
         """Генерация теста"""
         try:
-            print(f"Генерация теста: {subject} -> {section} -> {topic} [{difficulty}]")
-            
             # Математика - используем DLL генератор
             if subject in ["Алгебра", "Математика"] and self.math_generator:
                 return self._generate_math_test(topic, difficulty)
             
-            # Другие предметы - LLM или локальные
-            if self.ollama_client:
+            # Другие предметы - LLM
+            try:
                 return self._generate_llm_test(subject, section, topic, difficulty)
-            
-            return self._generate_local_test(subject, section, topic, difficulty)
-        except Exception as e:
-            print(f"Ошибка генерации теста: {e}")
+            except Exception:
+                return self._generate_local_test(subject, section, topic, difficulty)
+                
+        except Exception:
             return self._generate_local_test(subject, section, topic, difficulty)
     
     @console.debug(PYTHON_FILENAME)
@@ -249,7 +206,7 @@ class TestingManager:
                         "correct_answer": problem['correct_answer']
                     })
         
-        # Дополняем LLM или локальными вопросами
+        # Дополняем локальными вопросами
         while len(questions) < NUM_QUESTIONS:
             local = self._get_local_math_question(topic)
             if local:
@@ -262,7 +219,6 @@ class TestingManager:
     @console.debug(PYTHON_FILENAME)
     def _generate_options(self, correct: str) -> List[str]:
         """Генерация вариантов ответов"""
-        import re
         options = [correct]
         numbers = re.findall(r'-?\d+\.?\d*', correct)
         
@@ -285,33 +241,36 @@ class TestingManager:
     
     @console.debug(PYTHON_FILENAME)
     def _generate_llm_test(self, subject: str, section: str, topic: str, difficulty: str) -> Optional[Dict]:
-        """Генерация через LLM"""
-        try:
-            diff_info = DIFFICULTY_LEVELS.get(difficulty, DIFFICULTY_LEVELS["Средний"])
-            
-            prompt = f"""Ты преподаватель {subject.lower()}а. Создай {NUM_QUESTIONS} вопросов по теме "{topic}" ({section}).
-Сложность: {difficulty} ({diff_info['style']}).
-
-Ответь СТРОГО в JSON:
-{{"questions": [{{"question": "Текст", "options": ["A", "B", "C", "D"], "correct_answer": "A"}}]}}
-
-Вопросы на русском. Только JSON."""
-            
-            response = self.ollama_client.invoke(prompt).strip()
-            
-            # Очистка markdown
-            if "```json" in response:
-                response = response.split("```json")[1].split("```")[0].strip()
-            elif "```" in response:
-                response = response.split("```")[1].split("```")[0].strip()
-            
-            data = json.loads(response)
-            if "questions" in data:
-                return data
-        except Exception as e:
-            print(f"Ошибка LLM: {e}")
+        """Генерация через LLM (deepseek-r1:7b)"""
+        from bot.llm import Prompt
         
-        return self._generate_local_test(subject, section, topic, difficulty)
+        diff_info = DIFFICULTY_LEVELS.get(difficulty, DIFFICULTY_LEVELS["Средний"])
+        
+        prompt = Prompt(
+            role=f"Ты преподаватель {subject.lower()}а. Создаёшь тесты с вариантами ответов.",
+            task=f"""Создай {NUM_QUESTIONS} тестовых вопросов по теме "{topic}" (раздел "{section}").
+Сложность: {difficulty} ({diff_info['style']}).
+Ответь СТРОГО в формате JSON: {{"questions": [{{"question": "Текст вопроса", "options": ["A", "B", "C", "D"], "correct_answer": "A"}}]}}
+Все вопросы на русском языке. Только JSON, без пояснений.""",
+            answer="Верни только валидный JSON с вопросами."
+        )
+        
+        response = chat.academic.ask(prompt)
+        
+        # Очистка от тегов <think>
+        response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
+        
+        # Очистка markdown
+        if "```json" in response:
+            response = response.split("```json")[1].split("```")[0].strip()
+        elif "```" in response:
+            response = response.split("```")[1].split("```")[0].strip()
+        
+        data = json.loads(response)
+        if "questions" in data and len(data["questions"]) > 0:
+            return data
+        
+        raise ValueError("Пустой ответ от LLM")
     
     @console.debug(PYTHON_FILENAME)
     def _get_local_math_question(self, topic: str) -> Optional[Dict]:
@@ -407,8 +366,7 @@ class TestingManager:
             
             state['test_results'] = results
             return results
-        except Exception as e:
-            print(f"Ошибка подсчёта: {e}")
+        except Exception:
             return None
     
     @console.debug(PYTHON_FILENAME)

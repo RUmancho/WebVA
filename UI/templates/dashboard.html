@@ -141,47 +141,20 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
-<script>
-function showTab(tabName) {
-    // Скрыть все вкладки
-    document.querySelectorAll('.tab-pane').forEach(pane => {
-        pane.classList.remove('active');
-    });
-    
-    // Убрать active со всех кнопок
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.classList.remove('active');
-    });
-    
-    // Показать выбранную вкладку
-    document.getElementById(tabName).classList.add('active');
-    event.target.classList.add('active');
-    
-    // Обновить URL без перезагрузки страницы
-    const url = new URL(window.location);
-    url.searchParams.set('tab', tabName);
-    window.history.pushState({}, '', url);
-    
-    // Инициализация специфичных вкладок
-    if (tabName === 'assignments') {
-        if (typeof initAssignments === 'function') initAssignments();
-    } else if (tabName === 'settings') {
-        if (typeof initSettings === 'function') initSettings();
-    } else if (tabName === 'theory') {
-        // Инициализация теории при открытии вкладки
-        setTimeout(() => {
-            if (typeof loadTheoryState === 'function') {
-                console.log('[Dashboard] Инициализация теории...');
-                loadTheoryState();
-            } else if (typeof loadSubjects === 'function') {
-                console.log('[Dashboard] Загрузка предметов...');
-                loadSubjects();
-            } else {
-                console.warn('[Dashboard] Функции теории не найдены');
-            }
-        }, 100);
-    }
-}
-</script>
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+<script src="{{ url_for('static', filename='js/theory.js') }}"></script>
+<script src="{{ url_for('static', filename='js/testing.js') }}"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+<script src="{{ url_for('static', filename='js/formulas.js') }}"></script>
+<script src="{{ url_for('static', filename='js/assignments.js') }}"></script>
+<script src="{{ url_for('static', filename='js/teachers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+<script src="{{ url_for('static', filename='js/personal-chat.js') }}"></script>
+<script src="{{ url_for('static', filename='js/requests.js') }}"></script>
+<script src="{{ url_for('static', filename='js/calls.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lessons.js') }}"></script>
 {% endblock %}

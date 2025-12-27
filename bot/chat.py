@@ -1,9 +1,13 @@
 """
 Модуль для работы с LLM напрямую (без Flask).
+Автоматически запускает Ollama сервер если он не запущен.
 """
 
 import os
 import sys
+import socket
+import subprocess
+import time
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
@@ -21,6 +25,57 @@ PYTHON_FILENAME = "chat"
 MODEL_NAME = "deepseek-r1:7b"
 NUM_THREADS = 1
 TEMPERATURE = 0.0
+OLLAMA_HOST = "localhost"
+OLLAMA_PORT = 11434
+
+# ========================== АВТОЗАПУСК OLLAMA ==========================
+
+def _is_ollama_running() -> bool:
+    """Проверка работает ли Ollama сервер"""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex((OLLAMA_HOST, OLLAMA_PORT))
+        sock.close()
+        return result == 0
+    except Exception:
+        return False
+
+
+def _start_ollama_server():
+    """Автоматический запуск Ollama сервера в фоне"""
+    if _is_ollama_running():
+        return True
+    
+    try:
+        # Запускаем ollama serve в фоновом режиме
+        if sys.platform == "win32":
+            subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+        else:
+            subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        
+        # Ждём запуска сервера (макс 10 секунд)
+        for _ in range(10):
+            time.sleep(1)
+            if _is_ollama_running():
+                return True
+        
+        return False
+    except Exception:
+        return False
+
+
+# Автозапуск при импорте модуля
+_start_ollama_server()
 
 # ========================== ИНИЦИАЛИЗАЦИЯ LLM ==========================
 
@@ -63,15 +118,12 @@ def explain_theory(topic: str) -> str:
     
     prompt = topics_map.get(topic)
     if not prompt:
-        print(f"[ERROR] Неизвестная тема: {topic}")
-        print(f"[INFO] Доступные темы: {list(topics_map.keys())}")
         return ""
     
     try:
         response = academic.ask(prompt)
         return response
     except Exception as e:
-        print(f"[ERROR] Ошибка генерации теории: {e}")
         return ""
 
 
@@ -128,37 +180,14 @@ def generate_tasks(topic: str, difficulty: str, n: int) -> str:
     
     topics = difficulty_map.get(difficulty)
     if not topics:
-        print(f"[ERROR] Неизвестная сложность: {difficulty}")
-        print(f"[INFO] Доступные уровни: easy, standard, hard")
         return ""
     
     prompt = topics.get(topic)
     if not prompt:
-        print(f"[ERROR] Неизвестная тема для уровня {difficulty}: {topic}")
-        print(f"[INFO] Доступные темы: {list(topics.keys())}")
         return ""
     
     try:
         response = academic.ask_with_params(prompt, n=n)
         return response
-    except Exception as e:
-        print(f"[ERROR] Ошибка генерации заданий: {e}")
+    except Exception:
         return ""
-
-
-# ========================== ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ ==========================
-
-if __name__ == "__main__":
-    print("=" * 60)
-    print("ГЕНЕРАЦИЯ ТЕОРИИ: Линейные уравнения")
-    print("=" * 60)
-    
-    theory = explain_theory("linear_equations")
-    print(theory)
-    
-    print("\n" + "=" * 60)
-    print("ГЕНЕРАЦИЯ ЗАДАНИЙ: 3 лёгких задания на дроби")
-    print("=" * 60)
-    
-    tasks = generate_tasks("fractions", "easy", 3)
-    print(tasks)

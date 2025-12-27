@@ -1,5 +1,3 @@
-typedef wchar_t char16_t;
-
 bool is_ascii_printable(const char16_t* str); // проверка ASCII
 bool is_name(const char16_t* str); //Валидация имени
 bool is_email(const wchar_t* str); //Валидация Email
