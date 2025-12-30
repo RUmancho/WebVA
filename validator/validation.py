@@ -27,13 +27,7 @@ class Validator:
     @classmethod
     def is_role(cls, role: str):
         """Валидация роли пользователя"""
-        if not role:
-            return False
-        
-        if role not in USER_ROLES:
-            return False
-        
-        return True
+        return role in USER_ROLES 
     
     @classmethod
     def is_subjects(cls, subjects):

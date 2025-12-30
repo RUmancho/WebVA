@@ -1,3 +1,4 @@
+import os
 import platform
 import re
 from pathlib import Path
@@ -9,6 +10,7 @@ class Library:
             header_path = name + ".h"
         self.ffi = FFI()
         self._os = platform.system()
+        self._dll_dir_handle = None
         self._load_library(name, header_path, search_path)
 
     def _define_lib_extension(self):
@@ -42,6 +44,14 @@ class Library:
 
         try:
             self.ffi.cdef(content)
+            
+            # На Windows 10+ добавляем директорию для поиска зависимостей DLL
+            if self._os == "Windows" and hasattr(os, 'add_dll_directory'):
+                try:
+                    self._dll_dir_handle = os.add_dll_directory(str(Path(search_path).absolute()))
+                except Exception as e:
+                    print(f"Warning: Could not add DLL directory: {e}")
+            
             self.lib = self.ffi.dlopen(str(dll_path.absolute()))
         except Exception as e:
             raise RuntimeError(f"CFFI cdef error: {e}")
