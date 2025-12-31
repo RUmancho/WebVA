@@ -22,14 +22,41 @@ from logger import console
 PYTHON_FILENAME = "testing"
 
 # Константы
-NUM_QUESTIONS = 5
+DEFAULT_NUM_QUESTIONS = 5
+MIN_QUESTIONS = 3
+MAX_QUESTIONS = 20
 
 # Уровни сложности
 DIFFICULTY_LEVELS = {
-    "Лёгкий": {"icon": "🟢", "description": "Базовые вопросы", "style": "простые вопросы"},
-    "Средний": {"icon": "🟡", "description": "Средний уровень", "style": "вопросы среднего уровня"},
-    "Хардкор": {"icon": "🔴", "description": "Сложные вопросы", "style": "сложные вопросы"}
+    "Лёгкий": {"icon": "🟢", "description": "Базовые вопросы", "style": "простые вопросы", "level": 1},
+    "Средний": {"icon": "🟡", "description": "Средний уровень", "style": "вопросы среднего уровня", "level": 2},
+    "Хардкор": {"icon": "🔴", "description": "Сложные вопросы", "style": "сложные вопросы", "level": 3}
 }
+
+# Типы тестов
+TEST_TYPES = {
+    "with_options": {"name": "С вариантами ответов", "icon": "📝", "description": "Выберите правильный вариант из предложенных"},
+    "without_options": {"name": "Без вариантов ответов", "icon": "✍️", "description": "Введите ответ самостоятельно"}
+}
+
+# Маппинг тем на функции генератора (Алгебра)
+ALGEBRA_TOPIC_MAPPING = {
+    "Линейные уравнения": "linear_equation",
+    "Квадратные уравнения": "quadratic_equation",
+    "Показательные уравнения": "exponential_equation",
+    # Неравенства
+    "Линейные неравенства": "linear_inequality",
+    "Квадратные неравенства": "quadratic_inequality",
+}
+
+# Инициализация Algebra генератора
+ALGEBRA_GENERATOR = None
+try:
+    from generator.generator import Algebra
+    ALGEBRA_GENERATOR = Algebra
+    print("[INFO] Algebra генератор загружен успешно")
+except Exception as e:
+    print(f"[WARNING] Не удалось загрузить Algebra генератор: {e}")
 
 # Стикеры для предметов
 SUBJECT_DATA = {
@@ -52,17 +79,55 @@ class TestingManager:
     
     def __init__(self):
         self.SUBJECTS_STRUCTURE = topics.SUBJECTS_STRUCTURE
-        self.math_generator = None
-        self._init_math_generator()
+        self.algebra_generator = ALGEBRA_GENERATOR
     
     @console.debug(PYTHON_FILENAME)
-    def _init_math_generator(self):
-        """Инициализация математического генератора"""
+    def _get_difficulty_level(self, difficulty: str) -> int:
+        """Преобразование названия сложности в числовой уровень для DLL"""
+        return DIFFICULTY_LEVELS.get(difficulty, DIFFICULTY_LEVELS["Средний"]).get("level", 2)
+    
+    @console.debug(PYTHON_FILENAME)
+    def _is_algebra_topic_supported(self, topic: str) -> bool:
+        """Проверка, поддерживается ли тема генератором Algebra"""
+        return topic in ALGEBRA_TOPIC_MAPPING and self.algebra_generator is not None
+    
+    @console.debug(PYTHON_FILENAME)
+    def _generate_algebra_question(self, topic: str, difficulty: str) -> Optional[Dict[str, Any]]:
+        """Генерация вопроса по алгебре через DLL генератор"""
         try:
-            from task_generator import get_math_generator
-            self.math_generator = get_math_generator()
-        except Exception:
-            pass
+            if not self.algebra_generator or topic not in ALGEBRA_TOPIC_MAPPING:
+                return None
+            
+            method_name = ALGEBRA_TOPIC_MAPPING[topic]
+            method = getattr(self.algebra_generator, method_name, None)
+            
+            if not method:
+                print(f"[WARNING] Метод {method_name} не найден в Algebra генераторе")
+                return None
+            
+            difficulty_level = self._get_difficulty_level(difficulty)
+            result = method(difficulty_level)
+            
+            if not result:
+                return None
+            
+            # Парсим результат: "уравнение|ответ"
+            parts = result.split("|")
+            if len(parts) >= 2:
+                equation = parts[0].strip()
+                answer = parts[1].strip()
+                
+                return {
+                    "question": f"Решите: {equation}",
+                    "correct_answer": answer,
+                    "raw_equation": equation
+                }
+            
+            return None
+            
+        except Exception as e:
+            print(f"[ERROR] Ошибка генерации алгебраического вопроса: {e}")
+            return None
     
     @console.debug(PYTHON_FILENAME)
     def init_testing_session(self):
@@ -73,7 +138,10 @@ class TestingManager:
                     'current_page': 'subjects', 'selected_subject': None,
                     'selected_section': None, 'selected_topic': None,
                     'selected_difficulty': None, 'current_test': None,
-                    'user_answers': {}, 'test_results': None, 'current_question': 0
+                    'user_answers': {}, 'test_results': None, 'current_question': 0,
+                    # Новые настройки
+                    'test_type': 'with_options',  # 'with_options' или 'without_options'
+                    'num_questions': DEFAULT_NUM_QUESTIONS
                 }
         except Exception:
             pass
@@ -89,7 +157,12 @@ class TestingManager:
             'selected_section': state.get('selected_section'),
             'selected_topic': state.get('selected_topic'),
             'selected_difficulty': state.get('selected_difficulty'),
-            'subjects': self.SUBJECTS_STRUCTURE
+            'test_type': state.get('test_type', 'with_options'),
+            'num_questions': state.get('num_questions', DEFAULT_NUM_QUESTIONS),
+            'subjects': self.SUBJECTS_STRUCTURE,
+            'test_types': TEST_TYPES,
+            'min_questions': MIN_QUESTIONS,
+            'max_questions': MAX_QUESTIONS
         }
     
     @console.debug(PYTHON_FILENAME)
@@ -156,65 +229,141 @@ class TestingManager:
     
     @console.debug(PYTHON_FILENAME)
     def show_difficulty_selection(self) -> Dict[str, Any]:
-        """Выбор сложности"""
+        """Выбор сложности и настроек теста"""
         self.init_testing_session()
         state = flask_session.get('testing_state', {})
         subject = state.get('selected_subject')
+        topic = state.get('selected_topic')
         
-        if not all([subject, state.get('selected_section'), state.get('selected_topic')]):
+        if not all([subject, state.get('selected_section'), topic]):
             state['current_page'] = 'subjects'
             return {'error': 'Не все параметры выбраны'}
+        
+        # Проверяем, поддерживается ли тема генератором
+        uses_generator = self._is_algebra_topic_supported(topic) if subject == "Алгебра" else False
         
         return {
             'subject': subject,
             'section': state.get('selected_section'),
-            'topic': state.get('selected_topic'),
+            'topic': topic,
             'icon': self.SUBJECTS_STRUCTURE[subject]["icon"],
-            'difficulty_levels': DIFFICULTY_LEVELS
+            'difficulty_levels': DIFFICULTY_LEVELS,
+            'test_types': TEST_TYPES,
+            'current_test_type': state.get('test_type', 'with_options'),
+            'current_num_questions': state.get('num_questions', DEFAULT_NUM_QUESTIONS),
+            'min_questions': MIN_QUESTIONS,
+            'max_questions': MAX_QUESTIONS,
+            'uses_generator': uses_generator,
+            'generator_info': "🚀 Для этой темы используется быстрый DLL генератор" if uses_generator else "🤖 Будет использован AI (deepseek-r1:7b)"
         }
     
     @console.debug(PYTHON_FILENAME)
-    def generate_test(self, subject: str, section: str, topic: str, difficulty: str) -> Optional[Dict[str, Any]]:
-        """Генерация теста"""
-        try:
-            # Математика - используем DLL генератор
-            if subject in ["Алгебра", "Математика"] and self.math_generator:
-                return self._generate_math_test(topic, difficulty)
-            
-            # Другие предметы - LLM
-            try:
-                return self._generate_llm_test(subject, section, topic, difficulty)
-            except Exception:
-                return self._generate_local_test(subject, section, topic, difficulty)
-                
-        except Exception:
-            return self._generate_local_test(subject, section, topic, difficulty)
+    def set_test_settings(self, test_type: str, num_questions: int) -> Dict[str, Any]:
+        """Установка настроек теста"""
+        self.init_testing_session()
+        state = flask_session.get('testing_state', {})
+        
+        # Валидация типа теста
+        if test_type not in TEST_TYPES:
+            test_type = 'with_options'
+        
+        # Валидация количества вопросов
+        num_questions = max(MIN_QUESTIONS, min(MAX_QUESTIONS, int(num_questions)))
+        
+        state['test_type'] = test_type
+        state['num_questions'] = num_questions
+        flask_session['testing_state'] = state
+        flask_session.modified = True
+        
+        return {
+            'success': True,
+            'test_type': test_type,
+            'num_questions': num_questions
+        }
     
     @console.debug(PYTHON_FILENAME)
-    def _generate_math_test(self, topic: str, difficulty: str) -> Dict[str, Any]:
-        """Тест по математике через DLL генератор"""
+    def generate_test(self, subject: str, section: str, topic: str, difficulty: str, 
+                      test_type: str = None, num_questions: int = None) -> Optional[Dict[str, Any]]:
+        """Генерация теста с настройками"""
+        try:
+            self.init_testing_session()
+            state = flask_session.get('testing_state', {})
+            
+            # Используем переданные параметры или из сессии
+            if test_type is None:
+                test_type = state.get('test_type', 'with_options')
+            if num_questions is None:
+                num_questions = state.get('num_questions', DEFAULT_NUM_QUESTIONS)
+            
+            # Валидация
+            num_questions = max(MIN_QUESTIONS, min(MAX_QUESTIONS, int(num_questions)))
+            with_options = test_type == 'with_options'
+            
+            print(f"[INFO] Генерация теста: {subject}/{section}/{topic}, сложность={difficulty}, "
+                  f"тип={test_type}, вопросов={num_questions}")
+            
+            # Алгебра - пробуем DLL генератор
+            if subject == "Алгебра" and self._is_algebra_topic_supported(topic):
+                result = self._generate_algebra_test(topic, difficulty, num_questions, with_options)
+                if result and result.get("questions"):
+                    return result
+            
+            # LLM для других предметов или если генератор не справился
+            try:
+                return self._generate_llm_test(subject, section, topic, difficulty, num_questions, with_options)
+            except Exception as e:
+                print(f"[WARNING] LLM генерация не удалась: {e}")
+                return self._generate_local_test(subject, section, topic, difficulty, num_questions, with_options)
+                
+        except Exception as e:
+            print(f"[ERROR] Ошибка генерации теста: {e}")
+            return self._generate_local_test(subject, section, topic, difficulty, 
+                                             num_questions or DEFAULT_NUM_QUESTIONS, 
+                                             test_type != 'without_options')
+    
+    @console.debug(PYTHON_FILENAME)
+    def _generate_algebra_test(self, topic: str, difficulty: str, num_questions: int, 
+                                with_options: bool) -> Optional[Dict[str, Any]]:
+        """Генерация теста по алгебре через DLL генератор"""
         questions = []
         
-        if self.math_generator and self.math_generator.is_topic_supported(topic):
-            for _ in range(NUM_QUESTIONS):
-                problem = self.math_generator.generate_problem_by_topic(topic, difficulty)
-                if problem:
-                    options = self._generate_options(problem['correct_answer'])
-                    questions.append({
-                        "question": problem['question'],
-                        "options": options,
-                        "correct_answer": problem['correct_answer']
-                    })
+        for i in range(num_questions):
+            question_data = self._generate_algebra_question(topic, difficulty)
+            if question_data:
+                question = {
+                    "question": question_data["question"],
+                    "correct_answer": question_data["correct_answer"]
+                }
+                
+                if with_options:
+                    question["options"] = self._generate_options(question_data["correct_answer"])
+                
+                questions.append(question)
         
-        # Дополняем локальными вопросами
-        while len(questions) < NUM_QUESTIONS:
-            local = self._get_local_math_question(topic)
-            if local:
-                questions.append(local)
-            else:
-                break
+        if not questions:
+            print(f"[WARNING] DLL генератор не создал вопросов для темы: {topic}")
+            return None
         
-        return {"questions": questions[:NUM_QUESTIONS]}
+        # Дополняем до нужного количества если не хватило
+        attempts = 0
+        while len(questions) < num_questions and attempts < num_questions * 2:
+            attempts += 1
+            question_data = self._generate_algebra_question(topic, difficulty)
+            if question_data:
+                question = {
+                    "question": question_data["question"],
+                    "correct_answer": question_data["correct_answer"]
+                }
+                if with_options:
+                    question["options"] = self._generate_options(question_data["correct_answer"])
+                questions.append(question)
+        
+        return {
+            "questions": questions[:num_questions],
+            "generator": "algebra_dll",
+            "test_type": "with_options" if with_options else "without_options"
+        }
+    
     
     @console.debug(PYTHON_FILENAME)
     def _generate_options(self, correct: str) -> List[str]:
@@ -240,17 +389,26 @@ class TestingManager:
         return options[:4]
     
     @console.debug(PYTHON_FILENAME)
-    def _generate_llm_test(self, subject: str, section: str, topic: str, difficulty: str) -> Optional[Dict]:
+    def _generate_llm_test(self, subject: str, section: str, topic: str, difficulty: str,
+                           num_questions: int = DEFAULT_NUM_QUESTIONS, 
+                           with_options: bool = True) -> Optional[Dict]:
         """Генерация через LLM (deepseek-r1:7b)"""
         from bot.llm import Prompt
         
         diff_info = DIFFICULTY_LEVELS.get(difficulty, DIFFICULTY_LEVELS["Средний"])
         
+        if with_options:
+            format_desc = '"options": ["A", "B", "C", "D"], "correct_answer": "A"'
+            format_instruction = 'с 4 вариантами ответов'
+        else:
+            format_desc = '"correct_answer": "точный ответ"'
+            format_instruction = 'с точным ответом (без вариантов)'
+        
         prompt = Prompt(
-            role=f"Ты преподаватель {subject.lower()}а. Создаёшь тесты с вариантами ответов.",
-            task=f"""Создай {NUM_QUESTIONS} тестовых вопросов по теме "{topic}" (раздел "{section}").
+            role=f"Ты преподаватель {subject.lower()}а. Создаёшь тесты {format_instruction}.",
+            task=f"""Создай {num_questions} тестовых вопросов по теме "{topic}" (раздел "{section}").
 Сложность: {difficulty} ({diff_info['style']}).
-Ответь СТРОГО в формате JSON: {{"questions": [{{"question": "Текст вопроса", "options": ["A", "B", "C", "D"], "correct_answer": "A"}}]}}
+Ответь СТРОГО в формате JSON: {{"questions": [{{"question": "Текст вопроса", {format_desc}}}]}}
 Все вопросы на русском языке. Только JSON, без пояснений.""",
             answer="Верни только валидный JSON с вопросами."
         )
@@ -268,7 +426,12 @@ class TestingManager:
         
         data = json.loads(response)
         if "questions" in data and len(data["questions"]) > 0:
-            return data
+            result = {
+                "questions": data["questions"][:num_questions],
+                "generator": "llm",
+                "test_type": "with_options" if with_options else "without_options"
+            }
+            return result
         
         raise ValueError("Пустой ответ от LLM")
     
@@ -288,7 +451,9 @@ class TestingManager:
         return random.choice(questions.get(topic, [])) if topic in questions else None
     
     @console.debug(PYTHON_FILENAME)
-    def _generate_local_test(self, subject: str, section: str, topic: str, difficulty: str) -> Dict:
+    def _generate_local_test(self, subject: str, section: str, topic: str, difficulty: str,
+                             num_questions: int = DEFAULT_NUM_QUESTIONS,
+                             with_options: bool = True) -> Dict:
         """Локальная генерация теста (fallback)"""
         local_tests = {
             "Линейные уравнения": [
@@ -296,7 +461,16 @@ class TestingManager:
                 {"question": "Коэффициент при x в 3x - 7 = 0?", "options": ["3", "-7", "0", "10"], "correct_answer": "3"},
                 {"question": "Решите: x/2 = 6", "options": ["x = 3", "x = 12", "x = 8", "x = 4"], "correct_answer": "x = 12"},
                 {"question": "Решений 0x + 5 = 5?", "options": ["Одно", "Два", "Бесконечно много", "Ни одного"], "correct_answer": "Бесконечно много"},
-                {"question": "x при ax + b = 0?", "options": ["x = -b/a", "x = b/a", "x = a/b", "x = -a/b"], "correct_answer": "x = -b/a"}
+                {"question": "x при ax + b = 0?", "options": ["x = -b/a", "x = b/a", "x = a/b", "x = -a/b"], "correct_answer": "x = -b/a"},
+                {"question": "Решите: 5x - 3 = 12", "options": ["x = 3", "x = 9", "x = 15", "x = 2"], "correct_answer": "x = 3"},
+                {"question": "Решите: -2x = 8", "options": ["x = 4", "x = -4", "x = 16", "x = -16"], "correct_answer": "x = -4"},
+            ],
+            "Квадратные уравнения": [
+                {"question": "Решите: x² - 4 = 0", "options": ["x = ±2", "x = 4", "x = -4", "x = 2"], "correct_answer": "x = ±2"},
+                {"question": "Дискриминант x² - 5x + 6 = 0:", "options": ["1", "25", "6", "-11"], "correct_answer": "1"},
+                {"question": "Сумма корней x² - 7x + 12 = 0:", "options": ["7", "12", "-7", "3"], "correct_answer": "7"},
+                {"question": "Произведение корней x² + 3x - 10 = 0:", "options": ["-10", "10", "3", "-3"], "correct_answer": "-10"},
+                {"question": "Решите: x² = 9", "options": ["x = ±3", "x = 3", "x = 9", "x = 81"], "correct_answer": "x = ±3"},
             ],
             "Треугольники": [
                 {"question": "Сумма углов треугольника?", "options": ["90°", "180°", "270°", "360°"], "correct_answer": "180°"},
@@ -314,15 +488,77 @@ class TestingManager:
             ]
         }
         
-        if topic in local_tests:
-            return {"questions": local_tests[topic][:NUM_QUESTIONS]}
+        questions = []
         
-        # Генерируем заглушку
-        return {"questions": [
-            {"question": f"Вопрос {i+1} по теме '{topic}'", 
-             "options": ["А", "Б", "В", "Г"], "correct_answer": "А"}
-            for i in range(NUM_QUESTIONS)
-        ]}
+        if topic in local_tests:
+            base_questions = local_tests[topic]
+            # Повторяем вопросы если нужно больше чем есть
+            while len(questions) < num_questions:
+                for q in base_questions:
+                    if len(questions) >= num_questions:
+                        break
+                    question = {
+                        "question": q["question"],
+                        "correct_answer": q["correct_answer"]
+                    }
+                    if with_options and "options" in q:
+                        question["options"] = q["options"]
+                    questions.append(question)
+        else:
+            # Генерируем заглушку
+            for i in range(num_questions):
+                question = {
+                    "question": f"Вопрос {i+1} по теме '{topic}'",
+                    "correct_answer": "А"
+                }
+                if with_options:
+                    question["options"] = ["А", "Б", "В", "Г"]
+                questions.append(question)
+        
+        return {
+            "questions": questions[:num_questions],
+            "generator": "local",
+            "test_type": "with_options" if with_options else "without_options"
+        }
+    
+    @console.debug(PYTHON_FILENAME)
+    def _normalize_answer(self, answer: str) -> str:
+        """Нормализация ответа для сравнения"""
+        if not answer:
+            return ""
+        # Убираем лишние пробелы, приводим к нижнему регистру
+        normalized = answer.strip().lower()
+        # Убираем пробелы вокруг знаков
+        normalized = re.sub(r'\s*([=<>±])\s*', r'\1', normalized)
+        # Убираем "x =" в начале если есть
+        normalized = re.sub(r'^x\s*=\s*', '', normalized)
+        return normalized
+    
+    @console.debug(PYTHON_FILENAME)
+    def _compare_answers(self, user_answer: str, correct_answer: str) -> bool:
+        """Сравнение ответов с учётом разных форматов"""
+        user_norm = self._normalize_answer(user_answer)
+        correct_norm = self._normalize_answer(correct_answer)
+        
+        # Прямое сравнение
+        if user_norm == correct_norm:
+            return True
+        
+        # Для числовых ответов
+        try:
+            user_nums = re.findall(r'-?\d+\.?\d*', user_norm)
+            correct_nums = re.findall(r'-?\d+\.?\d*', correct_norm)
+            
+            if user_nums and correct_nums:
+                # Сравниваем числа
+                user_floats = sorted([float(n) for n in user_nums])
+                correct_floats = sorted([float(n) for n in correct_nums])
+                if user_floats == correct_floats:
+                    return True
+        except Exception:
+            pass
+        
+        return False
     
     @console.debug(PYTHON_FILENAME)
     def calculate_results(self) -> Optional[Dict[str, Any]]:
@@ -332,12 +568,37 @@ class TestingManager:
             state = flask_session.get('testing_state', {})
             test = state.get('current_test')
             answers = state.get('user_answers', {})
+            test_type = test.get('test_type', 'with_options') if test else 'with_options'
             
             if not test:
                 return None
             
             questions = test['questions']
-            correct = sum(1 for i, q in enumerate(questions) if answers.get(i) == q['correct_answer'])
+            
+            # Подсчёт правильных ответов
+            correct = 0
+            detailed_results = []
+            
+            for i, q in enumerate(questions):
+                user_answer = answers.get(i, answers.get(str(i), ""))
+                correct_answer = q['correct_answer']
+                
+                # Для тестов с вариантами - точное сравнение, без вариантов - нормализованное
+                if test_type == 'with_options':
+                    is_correct = user_answer == correct_answer
+                else:
+                    is_correct = self._compare_answers(user_answer, correct_answer)
+                
+                if is_correct:
+                    correct += 1
+                
+                detailed_results.append({
+                    'question': q['question'],
+                    'user_answer': user_answer,
+                    'correct_answer': correct_answer,
+                    'is_correct': is_correct
+                })
+            
             total = len(questions)
             pct = (correct / total) * 100 if total else 0
             
@@ -357,16 +618,16 @@ class TestingManager:
                 'correct_count': correct, 'total_questions': total, 'percentage': pct,
                 'grade': grade, 'grade_icon': icon, 'congratulations': msg,
                 'celebration_emojis': emojis,
-                'detailed_results': [
-                    {'question': q['question'], 'user_answer': answers.get(i, ""),
-                     'correct_answer': q['correct_answer'], 'is_correct': answers.get(i) == q['correct_answer']}
-                    for i, q in enumerate(questions)
-                ]
+                'detailed_results': detailed_results,
+                'test_type': test_type
             }
             
             state['test_results'] = results
+            flask_session['testing_state'] = state
+            flask_session.modified = True
             return results
-        except Exception:
+        except Exception as e:
+            print(f"[ERROR] Ошибка подсчёта результатов: {e}")
             return None
     
     @console.debug(PYTHON_FILENAME)

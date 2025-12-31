@@ -366,5 +366,214 @@ def api_theory_explanation():
         return jsonify({'error': f'Ошибка генерации: {str(e)}'}), 500
 
 
+# ========================== API: ТЕСТИРОВАНИЕ ==========================
+
+@app.route('/api/testing/state')
+def api_testing_state():
+    """Получение текущего состояния тестирования"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = testing_manager.show_testing_interface()
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/testing/subjects')
+def api_testing_subjects():
+    """Получение списка предметов для тестирования"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = testing_manager.show_subjects()
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/testing/select-subject', methods=['POST'])
+def api_testing_select_subject():
+    """Выбор предмета для тестирования"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Некорректные данные'}), 400
+        
+        subject = data.get('subject', '').strip()
+        if not subject:
+            return jsonify({'error': 'Предмет не указан'}), 400
+        
+        # Сохраняем в сессию
+        if 'testing_state' not in session:
+            session['testing_state'] = {}
+        session['testing_state']['selected_subject'] = subject
+        session['testing_state']['current_page'] = 'sections'
+        session.modified = True
+        
+        result = testing_manager.show_sections(subject)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/testing/select-section', methods=['POST'])
+def api_testing_select_section():
+    """Выбор раздела для тестирования"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Некорректные данные'}), 400
+        
+        section = data.get('section', '').strip()
+        if not section:
+            return jsonify({'error': 'Раздел не указан'}), 400
+        
+        # Сохраняем в сессию
+        if 'testing_state' not in session:
+            session['testing_state'] = {}
+        session['testing_state']['selected_section'] = section
+        session['testing_state']['current_page'] = 'topics'
+        session.modified = True
+        
+        subject = session['testing_state'].get('selected_subject')
+        result = testing_manager.show_topics(subject, section)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/testing/select-topic', methods=['POST'])
+def api_testing_select_topic():
+    """Выбор темы для тестирования"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Некорректные данные'}), 400
+        
+        topic = data.get('topic', '').strip()
+        if not topic:
+            return jsonify({'error': 'Тема не указана'}), 400
+        
+        # Сохраняем в сессию
+        if 'testing_state' not in session:
+            session['testing_state'] = {}
+        session['testing_state']['selected_topic'] = topic
+        session['testing_state']['current_page'] = 'difficulty'
+        session.modified = True
+        
+        result = testing_manager.show_difficulty_selection()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/testing/generate-test', methods=['POST'])
+def api_testing_generate_test():
+    """Генерация теста"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Некорректные данные'}), 400
+        
+        subject = data.get('subject', '').strip()
+        section = data.get('section', '').strip()
+        topic = data.get('topic', '').strip()
+        difficulty = data.get('difficulty', '').strip()
+        test_type = data.get('test_type', 'with_options')
+        num_questions = data.get('num_questions', 5)
+        
+        if not all([subject, section, topic, difficulty]):
+            return jsonify({'error': 'Не все параметры указаны'}), 400
+        
+        # Сохраняем настройки в сессию
+        if 'testing_state' not in session:
+            session['testing_state'] = {}
+        session['testing_state']['selected_difficulty'] = difficulty
+        session['testing_state']['test_type'] = test_type
+        session['testing_state']['num_questions'] = num_questions
+        session['testing_state']['current_page'] = 'test'
+        session['testing_state']['user_answers'] = {}
+        session.modified = True
+        
+        # Генерируем тест
+        test = testing_manager.generate_test(subject, section, topic, difficulty, test_type, num_questions)
+        
+        if not test or not test.get('questions'):
+            return jsonify({'error': 'Не удалось сгенерировать тест'}), 500
+        
+        # Сохраняем тест в сессию
+        session['testing_state']['current_test'] = test
+        session.modified = True
+        
+        return jsonify({'test': test})
+    except Exception as e:
+        print(f"[ERROR] Ошибка генерации теста: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/testing/submit-answer', methods=['POST'])
+def api_testing_submit_answer():
+    """Сохранение ответа на вопрос"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Некорректные данные'}), 400
+        
+        question_index = data.get('question_index')
+        answer = data.get('answer', '')
+        
+        if question_index is None:
+            return jsonify({'error': 'Индекс вопроса не указан'}), 400
+        
+        # Сохраняем ответ в сессию
+        if 'testing_state' not in session:
+            session['testing_state'] = {}
+        if 'user_answers' not in session['testing_state']:
+            session['testing_state']['user_answers'] = {}
+        
+        session['testing_state']['user_answers'][question_index] = answer
+        session.modified = True
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/testing/finish-test', methods=['POST'])
+def api_testing_finish_test():
+    """Завершение теста и подсчёт результатов"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        results = testing_manager.calculate_results()
+        
+        if not results:
+            return jsonify({'error': 'Не удалось подсчитать результаты'}), 500
+        
+        return jsonify({'results': results})
+    except Exception as e:
+        print(f"[ERROR] Ошибка подсчёта результатов: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
