@@ -18,6 +18,9 @@ from bot.chatbot import chatbot
 from bot.theory import theory_manager
 from bot.testing import testing_manager
 from formulas import formula_manager
+from logger import console
+
+PYTHON_FILENAME = "app"
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -522,7 +525,7 @@ def api_testing_generate_test():
         
         return jsonify({'test': test})
     except Exception as e:
-        print(f"[ERROR] Ошибка генерации теста: {e}")
+        console.error(f"Ошибка генерации теста: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
 
@@ -543,17 +546,52 @@ def api_testing_submit_answer():
         if question_index is None:
             return jsonify({'error': 'Индекс вопроса не указан'}), 400
         
-        # Сохраняем ответ в сессию
+        # Сохраняем ответ в сессию (используем строковый ключ для корректной сериализации)
         if 'testing_state' not in session:
             session['testing_state'] = {}
         if 'user_answers' not in session['testing_state']:
             session['testing_state']['user_answers'] = {}
         
-        session['testing_state']['user_answers'][question_index] = answer
+        # Преобразуем ключ в строку для надёжной сериализации JSON
+        session['testing_state']['user_answers'][str(question_index)] = answer
         session.modified = True
         
         return jsonify({'success': True})
     except Exception as e:
+        console.error(f"Ошибка сохранения ответа: {e}", PYTHON_FILENAME)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/testing/submit-all-answers', methods=['POST'])
+def api_testing_submit_all_answers():
+    """Сохранение всех ответов сразу (для надёжности перед завершением теста)"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Некорректные данные'}), 400
+        
+        answers = data.get('answers', {})
+        
+        # Сохраняем все ответы в сессию
+        if 'testing_state' not in session:
+            session['testing_state'] = {}
+        if 'user_answers' not in session['testing_state']:
+            session['testing_state']['user_answers'] = {}
+        
+        # Преобразуем все ключи в строки
+        for question_index, answer in answers.items():
+            session['testing_state']['user_answers'][str(question_index)] = answer
+        
+        session.modified = True
+        
+        console.info(f"Сохранено {len(answers)} ответов: {session['testing_state']['user_answers']}", PYTHON_FILENAME)
+        
+        return jsonify({'success': True, 'saved_count': len(answers)})
+    except Exception as e:
+        console.error(f"Ошибка сохранения всех ответов: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
 
@@ -571,7 +609,7 @@ def api_testing_finish_test():
         
         return jsonify({'results': results})
     except Exception as e:
-        print(f"[ERROR] Ошибка подсчёта результатов: {e}")
+        console.error(f"Ошибка подсчёта результатов: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
 

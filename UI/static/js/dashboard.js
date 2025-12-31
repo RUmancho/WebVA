@@ -37,6 +37,19 @@ function showTab(tabName) {
                 console.warn('[Dashboard] Функции теории не найдены');
             }
         }, 100);
+    } else if (tabName === 'testing') {
+        // Инициализация тестирования при открытии вкладки
+        setTimeout(() => {
+            if (typeof loadTestingState === 'function') {
+                console.log('[Dashboard] Инициализация тестирования...');
+                loadTestingState();
+            } else if (typeof loadTestingSubjects === 'function') {
+                console.log('[Dashboard] Загрузка предметов тестирования...');
+                loadTestingSubjects();
+            } else {
+                console.warn('[Dashboard] Функции тестирования не найдены');
+            }
+        }, 100);
     }
 }
 

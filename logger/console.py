@@ -5,10 +5,42 @@ from typing import Any, Callable, Optional
 
 colorama.init()
 
+
+# ========================== ФУНКЦИИ ЛОГИРОВАНИЯ ==========================
+
+def info(message: str, module: Optional[str] = None) -> None:
+    """Информационное сообщение"""
+    prefix = f"[{module}] " if module else ""
+    print(f"{colorama.Fore.BLUE}[INFO]{colorama.Style.RESET_ALL} {prefix}{message}")
+
+
+def warning(message: str, module: Optional[str] = None) -> None:
+    """Предупреждение"""
+    prefix = f"[{module}] " if module else ""
+    print(f"{colorama.Fore.YELLOW}[WARNING]{colorama.Style.RESET_ALL} {prefix}{message}")
+
+
+def error(message: str, module: Optional[str] = None) -> None:
+    """Ошибка"""
+    prefix = f"[{module}] " if module else ""
+    print(f"{colorama.Fore.RED}[ERROR]{colorama.Style.RESET_ALL} {prefix}{message}")
+
+
+def debug_log(message: str, module: Optional[str] = None) -> None:
+    """Отладочное сообщение"""
+    prefix = f"[{module}] " if module else ""
+    print(f"{colorama.Fore.CYAN}[DEBUG]{colorama.Style.RESET_ALL} {prefix}{message}")
+
+
+def success(message: str, module: Optional[str] = None) -> None:
+    """Успешное сообщение"""
+    prefix = f"[{module}] " if module else ""
+    print(f"{colorama.Fore.GREEN}[SUCCESS]{colorama.Style.RESET_ALL} {prefix}{message}")
+
 def debug(
     module: Optional[str] = None,
     slow_threshold: float = 1.0,
-    show_args: bool = True,
+    show_args: bool = False,
     show_time: bool = True,
     show_return: bool = False
 ) -> Callable:

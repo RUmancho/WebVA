@@ -8,8 +8,32 @@ let testingState = {
     testType: 'with_options',
     numQuestions: 5,
     currentTest: null,
-    userAnswers: {}
+    userAnswers: {},
+    pendingSaves: new Map(),
+    saveDebounceTimers: {},
+    progressUpdatePending: false  // Флаг для throttle обновления прогресса
 };
+
+// Кэшированные DOM элементы для оптимизации
+const domCache = {};
+
+// Статический элемент для escapeHtml (переиспользуемый)
+const escapeDiv = document.createElement('div');
+
+// Функция получения элемента из кэша
+function getElement(id) {
+    if (!domCache[id]) {
+        domCache[id] = document.getElementById(id);
+    }
+    return domCache[id];
+}
+
+// Очистка кэша (при необходимости)
+function clearDomCache() {
+    for (const key in domCache) {
+        delete domCache[key];
+    }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('testing-content')) {
@@ -18,10 +42,13 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function loadTestingState() {
+    console.log('[Testing] Загрузка состояния тестирования...');
     fetch('/api/testing/state')
         .then(r => r.json())
         .then(data => {
+            console.log('[Testing] Получены данные:', data);
             if (data.error) {
+                console.error('[Testing] Ошибка в данных:', data.error);
                 showTestingError(data.error);
                 return;
             }
@@ -35,11 +62,14 @@ function loadTestingState() {
             testingState.numQuestions = data.num_questions || 5;
             
             if (data.subjects) {
+                console.log('[Testing] Предметы найдены, количество:', Object.keys(data.subjects).length);
                 displayTestingSubjects(data.subjects);
+            } else {
+                console.warn('[Testing] Предметы не найдены в ответе!');
             }
         })
         .catch(err => {
-            console.error('Ошибка загрузки состояния:', err);
+            console.error('[Testing] Ошибка загрузки состояния:', err);
             loadTestingSubjects();
         });
 }
@@ -63,20 +93,33 @@ function loadTestingSubjects() {
 }
 
 function displayTestingSubjects(subjects) {
-    const container = document.getElementById('subjects-list');
-    container.innerHTML = '';
+    const container = getElement('testing-subjects-list');
+    if (!container) return;
     
-    Object.keys(subjects).forEach(subject => {
+    // Используем DocumentFragment для батчевой вставки
+    const fragment = document.createDocumentFragment();
+    const subjectKeys = Object.keys(subjects);
+    
+    subjectKeys.forEach(subject => {
         const subjectData = subjects[subject];
         const col = document.createElement('div');
         col.className = 'col-md-4 mb-3';
-        col.innerHTML = `
-            <button class="btn btn-outline-primary w-100 p-3 subject-btn" onclick="selectTestingSubject('${subject}')">
-                <h5 class="mb-0">${subjectData.icon || '📚'} ${subject}</h5>
-            </button>
-        `;
-        container.appendChild(col);
+        
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-outline-primary w-100 p-3 subject-btn';
+        btn.onclick = () => selectTestingSubject(subject);
+        
+        const h5 = document.createElement('h5');
+        h5.className = 'mb-0';
+        h5.textContent = `${subjectData.icon || '📚'} ${subject}`;
+        
+        btn.appendChild(h5);
+        col.appendChild(btn);
+        fragment.appendChild(col);
     });
+    
+    container.innerHTML = '';
+    container.appendChild(fragment);
     
     showTestingPage('subjects');
     updateTestingBreadcrumbs(['Предметы']);
@@ -106,26 +149,36 @@ function selectTestingSubject(subject) {
 }
 
 function displayTestingSections(subject, sections) {
-    const title = document.getElementById('sections-title');
-    const list = document.getElementById('sections-list');
+    const title = getElement('testing-sections-title');
+    const list = getElement('testing-sections-list');
     
     title.textContent = `${subject} - Выберите раздел:`;
-    list.innerHTML = '';
+    
+    const fragment = document.createDocumentFragment();
     
     Object.keys(sections).forEach(section => {
         const item = document.createElement('a');
         item.href = '#';
         item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-        item.innerHTML = `
-            <span>📖 ${section}</span>
-            <span class="badge bg-secondary">${sections[section].topics ? sections[section].topics.length : 0} тем</span>
-        `;
+        
+        const span1 = document.createElement('span');
+        span1.textContent = section;
+        
+        const span2 = document.createElement('span');
+        span2.className = 'badge bg-secondary';
+        span2.textContent = `${sections[section].topics ? sections[section].topics.length : 0} тем`;
+        
+        item.appendChild(span1);
+        item.appendChild(span2);
         item.onclick = (e) => {
             e.preventDefault();
             selectTestingSection(section);
         };
-        list.appendChild(item);
+        fragment.appendChild(item);
     });
+    
+    list.innerHTML = '';
+    list.appendChild(fragment);
     
     showTestingPage('sections');
     updateTestingBreadcrumbs(['Предметы', subject]);
@@ -155,23 +208,27 @@ function selectTestingSection(section) {
 }
 
 function displayTestingTopics(topics) {
-    const title = document.getElementById('topics-title');
-    const list = document.getElementById('topics-list');
+    const title = getElement('testing-topics-title');
+    const list = getElement('testing-topics-list');
     
     title.textContent = `${testingState.selectedSubject} → ${testingState.selectedSection} - Выберите тему:`;
-    list.innerHTML = '';
+    
+    const fragment = document.createDocumentFragment();
     
     topics.forEach(topic => {
         const item = document.createElement('a');
         item.href = '#';
         item.className = 'list-group-item list-group-item-action';
-        item.innerHTML = `🎯 ${topic}`;
+        item.textContent = topic;
         item.onclick = (e) => {
             e.preventDefault();
             selectTestingTopic(topic);
         };
-        list.appendChild(item);
+        fragment.appendChild(item);
     });
+    
+    list.innerHTML = '';
+    list.appendChild(fragment);
     
     showTestingPage('topics');
     updateTestingBreadcrumbs(['Предметы', testingState.selectedSubject, testingState.selectedSection]);
@@ -202,54 +259,53 @@ function selectTestingTopic(topic) {
 
 function displayDifficultyLevels(data) {
     const levels = data.difficulty_levels || {};
-    const title = document.getElementById('difficulty-title');
-    const container = document.getElementById('difficulty-list');
-    const generatorInfo = document.getElementById('generator-info');
+    const title = getElement('difficulty-title');
+    const container = getElement('difficulty-list');
+    const generatorInfo = getElement('generator-info');
     
     title.textContent = `${testingState.selectedSubject} → ${testingState.selectedSection} → ${testingState.selectedTopic}`;
     
-    // Показываем информацию о генераторе
-    if (data.generator_info) {
-        generatorInfo.textContent = data.generator_info;
-        generatorInfo.style.display = 'block';
-    } else {
-        generatorInfo.style.display = 'none';
-    }
+    if (generatorInfo) generatorInfo.style.display = 'none';
     
-    // Устанавливаем текущие значения настроек
     const testTypeRadio = document.querySelector(`input[name="test_type"][value="${data.current_test_type || 'with_options'}"]`);
     if (testTypeRadio) testTypeRadio.checked = true;
     
-    const numQuestionsInput = document.getElementById('num_questions');
+    const numQuestionsInput = getElement('num_questions');
     if (numQuestionsInput) {
         numQuestionsInput.value = data.current_num_questions || 5;
         numQuestionsInput.min = data.min_questions || 3;
         numQuestionsInput.max = data.max_questions || 20;
     }
     
-    container.innerHTML = '';
+    const fragment = document.createDocumentFragment();
     
     Object.keys(levels).forEach(difficulty => {
         const level = levels[difficulty];
         const card = document.createElement('div');
         card.className = 'card mb-3 difficulty-card';
+        
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary btn-lg w-100';
+        btn.textContent = `${level.icon || '🟢'} ${difficulty}`;
+        btn.onclick = () => selectDifficulty(difficulty);
+        
         card.innerHTML = `
             <div class="card-body">
                 <div class="row align-items-center">
-                    <div class="col-md-3">
-                        <button class="btn btn-primary btn-lg w-100" onclick="selectDifficulty('${difficulty}')">
-                            ${level.icon || '🟢'} ${difficulty}
-                        </button>
-                    </div>
+                    <div class="col-md-3"></div>
                     <div class="col-md-9">
-                        <strong>${difficulty}:</strong> ${level.description || ''}
-                        <br><small class="text-muted">${level.style || ''}</small>
+                        <strong>${escapeHtml(difficulty)}:</strong> ${escapeHtml(level.description || '')}
+                        <br><small class="text-muted">${escapeHtml(level.style || '')}</small>
                     </div>
                 </div>
             </div>
         `;
-        container.appendChild(card);
+        card.querySelector('.col-md-3').appendChild(btn);
+        fragment.appendChild(card);
     });
+    
+    container.innerHTML = '';
+    container.appendChild(fragment);
     
     showTestingPage('difficulty');
     updateTestingBreadcrumbs(['Предметы', testingState.selectedSubject, testingState.selectedSection, testingState.selectedTopic]);
@@ -308,134 +364,248 @@ function generateTest() {
 }
 
 function displayTest(test) {
-    const title = document.getElementById('test-title');
-    const questionsDiv = document.getElementById('test-questions');
-    const testTypeBadge = document.getElementById('test-type-badge');
-    const generatorBadge = document.getElementById('test-generator-badge');
+    const title = getElement('test-title');
+    const questionsDiv = getElement('test-questions');
+    const testTypeBadge = getElement('test-type-badge');
+    const generatorBadge = getElement('test-generator-badge');
     
     title.textContent = `Тест: ${testingState.selectedTopic} (${testingState.selectedDifficulty})`;
     
-    // Показываем информацию о тесте
     const isWithOptions = test.test_type === 'with_options';
     testTypeBadge.innerHTML = isWithOptions 
         ? '<span class="badge bg-primary">📝 С вариантами</span>'
         : '<span class="badge bg-info">✍️ Свободный ввод</span>';
     
-    if (test.generator) {
-        const generatorNames = {
-            'algebra_dll': '🚀 DLL генератор',
-            'llm': '🤖 AI генератор',
-            'local': '📚 Локальная база'
-        };
-        generatorBadge.innerHTML = `<span class="badge bg-secondary">${generatorNames[test.generator] || test.generator}</span>`;
-    }
+    generatorBadge.innerHTML = '';
     
-    questionsDiv.innerHTML = '';
+    const fragment = document.createDocumentFragment();
+    const totalQuestions = test.questions.length;
     
     test.questions.forEach((question, index) => {
         const card = document.createElement('div');
         card.className = 'card mb-3 question-card';
         card.id = `question-card-${index}`;
         
-        let optionsHtml = '';
+        const cardBody = document.createElement('div');
+        cardBody.className = 'card-body';
+        
+        const titleEl = document.createElement('h5');
+        titleEl.className = 'card-title';
+        titleEl.textContent = `Вопрос ${index + 1} из ${totalQuestions}`;
+        
+        const questionText = document.createElement('p');
+        questionText.className = 'card-text fs-5';
+        questionText.textContent = question.question;
+        
+        cardBody.appendChild(titleEl);
+        cardBody.appendChild(questionText);
         
         if (isWithOptions && question.options) {
-            // Тест с вариантами ответов
-            optionsHtml = `
-                <div class="form-check" id="question-${index}">
-                    ${question.options.map((opt, optIndex) => `
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" 
-                                   name="question_${index}" id="q${index}_opt${optIndex}" 
-                                   value="${escapeHtml(opt)}" 
-                                   onchange="saveTestingAnswer(${index}, this.value)">
-                            <label class="form-check-label" for="q${index}_opt${optIndex}">
-                                ${escapeHtml(opt)}
-                            </label>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
+            const optionsDiv = document.createElement('div');
+            optionsDiv.className = 'form-check';
+            optionsDiv.id = `question-${index}`;
+            
+            question.options.forEach((opt, optIndex) => {
+                const checkDiv = document.createElement('div');
+                checkDiv.className = 'form-check';
+                
+                const input = document.createElement('input');
+                input.className = 'form-check-input';
+                input.type = 'radio';
+                input.name = `question_${index}`;
+                input.id = `q${index}_opt${optIndex}`;
+                input.value = opt;
+                input.onchange = function() { saveTestingAnswer(index, this.value); };
+                
+                const label = document.createElement('label');
+                label.className = 'form-check-label';
+                label.htmlFor = `q${index}_opt${optIndex}`;
+                label.textContent = opt;
+                
+                checkDiv.appendChild(input);
+                checkDiv.appendChild(label);
+                optionsDiv.appendChild(checkDiv);
+            });
+            
+            cardBody.appendChild(optionsDiv);
         } else {
-            // Тест без вариантов - свободный ввод
-            optionsHtml = `
-                <div class="mt-3">
-                    <label for="answer_${index}" class="form-label">Ваш ответ:</label>
-                    <input type="text" class="form-control test-input" 
-                           id="answer_${index}" 
-                           placeholder="Введите ответ (например: x = 5 или просто 5)"
-                           onchange="saveTestingAnswer(${index}, this.value)"
-                           onkeyup="saveTestingAnswer(${index}, this.value)">
-                    <small class="text-muted">Для уравнений можно вводить в формате "x = значение" или просто "значение"</small>
-                </div>
-            `;
+            const inputDiv = document.createElement('div');
+            inputDiv.className = 'mt-3';
+            
+            const label = document.createElement('label');
+            label.className = 'form-label';
+            label.htmlFor = `answer_${index}`;
+            label.textContent = 'Ваш ответ:';
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'form-control test-input';
+            input.id = `answer_${index}`;
+            input.placeholder = 'Введите ответ (например: x = 5 или просто 5)';
+            // Используем только oninput с дебаунсингом (более эффективно чем onkeyup)
+            input.oninput = function() { saveTestingAnswer(index, this.value); };
+            
+            const small = document.createElement('small');
+            small.className = 'text-muted';
+            small.textContent = 'Для уравнений можно вводить в формате "x = значение" или просто "значение"';
+            
+            inputDiv.appendChild(label);
+            inputDiv.appendChild(input);
+            inputDiv.appendChild(small);
+            cardBody.appendChild(inputDiv);
         }
         
-        card.innerHTML = `
-            <div class="card-body">
-                <h5 class="card-title">Вопрос ${index + 1} из ${test.questions.length}</h5>
-                <p class="card-text fs-5">${escapeHtml(question.question)}</p>
-                ${optionsHtml}
-            </div>
-        `;
-        questionsDiv.appendChild(card);
+        card.appendChild(cardBody);
+        fragment.appendChild(card);
     });
+    
+    questionsDiv.innerHTML = '';
+    questionsDiv.appendChild(fragment);
     
     showTestingPage('test');
     updateTestingProgress();
 }
 
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (!text) return '';
+    escapeDiv.textContent = text;
+    return escapeDiv.innerHTML;
 }
 
 function saveTestingAnswer(questionIndex, answer) {
     testingState.userAnswers[questionIndex] = answer;
     
-    // Подсвечиваем отвеченный вопрос
+    // Подсвечиваем отвеченный вопрос (без querySelector, напрямую по ID)
     const card = document.getElementById(`question-card-${questionIndex}`);
-    if (card && answer) {
-        card.classList.add('answered');
-    } else if (card) {
-        card.classList.remove('answered');
+    if (card) {
+        if (answer) {
+            card.classList.add('answered');
+        } else {
+            card.classList.remove('answered');
+        }
     }
     
-    updateTestingProgress();
+    // Throttle обновления прогресса - не чаще чем раз в 100мс
+    if (!testingState.progressUpdatePending) {
+        testingState.progressUpdatePending = true;
+        requestAnimationFrame(() => {
+            updateTestingProgress();
+            testingState.progressUpdatePending = false;
+        });
+    }
     
-    // Сохраняем на сервере
-    fetch('/api/testing/submit-answer', {
+    // Дебаунсинг сохранения на сервер: 500мс задержка
+    if (testingState.saveDebounceTimers[questionIndex]) {
+        clearTimeout(testingState.saveDebounceTimers[questionIndex]);
+    }
+    
+    testingState.saveDebounceTimers[questionIndex] = setTimeout(() => {
+        saveAnswerToServer(questionIndex, answer);
+    }, 500);
+}
+
+function saveAnswerToServer(questionIndex, answer) {
+    // Создаём промис для отслеживания запроса
+    const savePromise = fetch('/api/testing/submit-answer', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({question_index: questionIndex, answer})
-    }).catch(err => console.error('Ошибка сохранения ответа:', err));
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.error) {
+            console.error('Ошибка сохранения ответа:', data.error);
+        } else {
+            console.log(`[Testing] Ответ ${questionIndex} сохранён`);
+        }
+    })
+    .catch(err => {
+        console.error('Ошибка сохранения ответа:', err);
+    })
+    .finally(() => {
+        testingState.pendingSaves.delete(questionIndex);
+    });
+    
+    testingState.pendingSaves.set(questionIndex, savePromise);
 }
 
 function updateTestingProgress() {
     if (!testingState.currentTest) return;
     
     const total = testingState.currentTest.questions.length;
-    const answered = Object.keys(testingState.userAnswers).filter(k => testingState.userAnswers[k]).length;
-    const progress = (answered / total) * 100;
+    let answered = 0;
     
-    const progressBar = document.getElementById('test-progress');
-    progressBar.style.width = progress + '%';
-    progressBar.textContent = `${answered}/${total}`;
-    progressBar.className = 'progress-bar';
-    
-    if (progress === 100) {
-        progressBar.classList.add('bg-success');
-    } else if (progress >= 50) {
-        progressBar.classList.add('bg-info');
+    // Более эффективный подсчёт без создания массива
+    for (const k in testingState.userAnswers) {
+        if (testingState.userAnswers[k]) answered++;
     }
     
-    const finishBtn = document.getElementById('finish-test-btn');
-    finishBtn.style.display = (answered === total) ? 'inline-block' : 'none';
+    const progress = (answered / total) * 100;
+    
+    const progressBar = getElement('test-progress');
+    if (!progressBar) return;
+    
+    // Минимизируем DOM-операции
+    progressBar.style.width = progress + '%';
+    progressBar.textContent = `${answered}/${total}`;
+    
+    // Устанавливаем класс за одну операцию
+    const newClass = progress === 100 ? 'progress-bar bg-success' : 
+                     progress >= 50 ? 'progress-bar bg-info' : 'progress-bar';
+    if (progressBar.className !== newClass) {
+        progressBar.className = newClass;
+    }
+    
+    const finishBtn = getElement('finish-test-btn');
+    if (finishBtn) {
+        const shouldShow = answered === total;
+        const currentlyShown = finishBtn.style.display === 'inline-block';
+        if (shouldShow !== currentlyShown) {
+            finishBtn.style.display = shouldShow ? 'inline-block' : 'none';
+        }
+    }
 }
 
-function finishTest() {
+async function finishTest() {
     showTestingLoading(true);
+    
+    // Сначала отменяем все дебаунс-таймеры и сохраняем все ответы немедленно
+    for (const questionIndex in testingState.saveDebounceTimers) {
+        clearTimeout(testingState.saveDebounceTimers[questionIndex]);
+        const answer = testingState.userAnswers[questionIndex];
+        if (answer !== undefined) {
+            saveAnswerToServer(parseInt(questionIndex), answer);
+        }
+    }
+    testingState.saveDebounceTimers = {};
+    
+    // Ждём завершения всех незавершённых запросов сохранения
+    if (testingState.pendingSaves.size > 0) {
+        console.log(`[Testing] Ожидание сохранения ${testingState.pendingSaves.size} ответов...`);
+        try {
+            await Promise.all(testingState.pendingSaves.values());
+        } catch (err) {
+            console.error('Ошибка при ожидании сохранения ответов:', err);
+        }
+    }
+    
+    // Перед отправкой на проверку, отправляем все ответы ещё раз для надёжности
+    try {
+        await fetch('/api/testing/submit-all-answers', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({answers: testingState.userAnswers})
+        });
+    } catch (err) {
+        console.error('Ошибка при отправке всех ответов:', err);
+    }
+    
+    // Теперь завершаем тест
     fetch('/api/testing/finish-test', {method: 'POST'})
         .then(r => r.json())
         .then(data => {
@@ -453,26 +623,53 @@ function finishTest() {
 }
 
 function displayTestingResults(results) {
-    const title = document.getElementById('results-title');
-    const content = document.getElementById('results-content');
+    const title = getElement('results-title');
+    const content = getElement('results-content');
     
     title.textContent = `${results.grade_icon || '📊'} Результаты: ${testingState.selectedTopic}`;
     
     const correct = results.correct_count || 0;
     const total = results.total_questions || 0;
     const percentage = results.percentage || 0;
+    const roundedPercentage = Math.round(percentage);
     
-    // Определяем цвет в зависимости от результата
     let resultColor = 'danger';
     if (percentage >= 90) resultColor = 'success';
     else if (percentage >= 70) resultColor = 'primary';
     else if (percentage >= 50) resultColor = 'warning';
     
+    // Создаём разметку результатов и деталей за один раз
+    let detailsHtml = '';
+    if (results.detailed_results) {
+        detailsHtml = results.detailed_results.map((detail, index) => {
+            const isCorrect = detail.is_correct;
+            const userAnswer = detail.user_answer ? escapeHtml(detail.user_answer) : '<em class="text-muted">Нет ответа</em>';
+            const correctAnswer = !isCorrect ? `<p class="mb-0 text-success"><strong>Правильный ответ:</strong> ${escapeHtml(detail.correct_answer)}</p>` : '';
+            
+            return `
+                <div class="card mb-2 result-card ${isCorrect ? 'correct' : 'incorrect'}">
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">Вопрос ${index + 1}: ${escapeHtml(detail.question)}</h6>
+                                <p class="mb-1"><strong>Ваш ответ:</strong> ${userAnswer}</p>
+                                ${correctAnswer}
+                            </div>
+                            <span class="badge bg-${isCorrect ? 'success' : 'danger'} fs-6">
+                                ${isCorrect ? '✅' : '❌'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
     content.innerHTML = `
         <div class="text-center mb-4">
             <h1 class="display-1">${results.celebration_emojis || '🎉'}</h1>
-            <h2 class="text-${resultColor}">${results.grade || 'N/A'}</h2>
-            <p class="lead">${results.congratulations || ''}</p>
+            <h2 class="text-${resultColor}">${escapeHtml(results.grade) || 'N/A'}</h2>
+            <p class="lead">${escapeHtml(results.congratulations) || ''}</p>
         </div>
         
         <div class="row mb-4">
@@ -487,7 +684,7 @@ function displayTestingResults(results) {
             <div class="col-md-4">
                 <div class="card text-center border-${resultColor}">
                     <div class="card-body">
-                        <h3 class="text-${resultColor}">${Math.round(percentage)}%</h3>
+                        <h3 class="text-${resultColor}">${roundedPercentage}%</h3>
                         <p class="mb-0">Процент выполнения</p>
                     </div>
                 </div>
@@ -496,7 +693,7 @@ function displayTestingResults(results) {
                 <div class="card text-center border-${resultColor}">
                     <div class="card-body">
                         <h3>${results.grade_icon || '📊'}</h3>
-                        <p class="mb-0">${results.grade || 'Оценка'}</p>
+                        <p class="mb-0">${escapeHtml(results.grade) || 'Оценка'}</p>
                     </div>
                 </div>
             </div>
@@ -505,37 +702,13 @@ function displayTestingResults(results) {
         <div class="progress mb-4" style="height: 25px;">
             <div class="progress-bar bg-${resultColor}" role="progressbar" 
                  style="width: ${percentage}%" aria-valuenow="${percentage}">
-                ${Math.round(percentage)}%
+                ${roundedPercentage}%
             </div>
         </div>
         
         <h5 class="mb-3">📋 Разбор вопросов:</h5>
-        <div id="results-details"></div>
+        <div id="results-details">${detailsHtml}</div>
     `;
-    
-    const details = document.getElementById('results-details');
-    if (results.detailed_results) {
-        results.detailed_results.forEach((detail, index) => {
-            const card = document.createElement('div');
-            const isCorrect = detail.is_correct;
-            card.className = `card mb-2 result-card ${isCorrect ? 'correct' : 'incorrect'}`;
-            card.innerHTML = `
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="mb-1">Вопрос ${index + 1}: ${escapeHtml(detail.question)}</h6>
-                            <p class="mb-1"><strong>Ваш ответ:</strong> ${escapeHtml(detail.user_answer) || '<em class="text-muted">Нет ответа</em>'}</p>
-                            ${!isCorrect ? `<p class="mb-0 text-success"><strong>Правильный ответ:</strong> ${escapeHtml(detail.correct_answer)}</p>` : ''}
-                        </div>
-                        <span class="badge bg-${isCorrect ? 'success' : 'danger'} fs-6">
-                            ${isCorrect ? '✅' : '❌'}
-                        </span>
-                    </div>
-                </div>
-            `;
-            details.appendChild(card);
-        });
-    }
     
     showTestingPage('results');
 }
@@ -555,8 +728,12 @@ function testingNavigate(page) {
             testType: 'with_options',
             numQuestions: 5,
             currentTest: null,
-            userAnswers: {}
+            userAnswers: {},
+            pendingSaves: new Map(),
+            saveDebounceTimers: {},
+            progressUpdatePending: false
         };
+        clearDomCache();  // Очищаем кэш при полной навигации
         loadTestingSubjects();
     } else if (page === 'sections' && testingState.selectedSubject) {
         testingState.currentPage = 'sections';
@@ -630,14 +807,14 @@ function updateTestingBreadcrumbs(items) {
 }
 
 function showTestingLoading(show) {
-    const loadingEl = document.getElementById('testing-loading');
+    const loadingEl = getElement('testing-loading');
     if (loadingEl) {
         loadingEl.style.display = show ? 'block' : 'none';
     }
 }
 
 function showTestingError(message) {
-    const errorDiv = document.getElementById('testing-error');
+    const errorDiv = getElement('testing-error');
     if (errorDiv) {
         errorDiv.textContent = message;
         errorDiv.style.display = 'block';

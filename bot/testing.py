@@ -54,9 +54,9 @@ ALGEBRA_GENERATOR = None
 try:
     from generator.generator import Algebra
     ALGEBRA_GENERATOR = Algebra
-    print("[INFO] Algebra генератор загружен успешно")
+    console.info("Algebra генератор загружен успешно", PYTHON_FILENAME)
 except Exception as e:
-    print(f"[WARNING] Не удалось загрузить Algebra генератор: {e}")
+    console.warning(f"Не удалось загрузить Algebra генератор: {e}", PYTHON_FILENAME)
 
 # Стикеры для предметов
 SUBJECT_DATA = {
@@ -102,7 +102,7 @@ class TestingManager:
             method = getattr(self.algebra_generator, method_name, None)
             
             if not method:
-                print(f"[WARNING] Метод {method_name} не найден в Algebra генераторе")
+                console.warning(f"Метод {method_name} не найден в Algebra генераторе", PYTHON_FILENAME)
                 return None
             
             difficulty_level = self._get_difficulty_level(difficulty)
@@ -126,7 +126,7 @@ class TestingManager:
             return None
             
         except Exception as e:
-            print(f"[ERROR] Ошибка генерации алгебраического вопроса: {e}")
+            console.error(f"Ошибка генерации алгебраического вопроса: {e}", PYTHON_FILENAME)
             return None
     
     @console.debug(PYTHON_FILENAME)
@@ -239,9 +239,6 @@ class TestingManager:
             state['current_page'] = 'subjects'
             return {'error': 'Не все параметры выбраны'}
         
-        # Проверяем, поддерживается ли тема генератором
-        uses_generator = self._is_algebra_topic_supported(topic) if subject == "Алгебра" else False
-        
         return {
             'subject': subject,
             'section': state.get('selected_section'),
@@ -252,9 +249,7 @@ class TestingManager:
             'current_test_type': state.get('test_type', 'with_options'),
             'current_num_questions': state.get('num_questions', DEFAULT_NUM_QUESTIONS),
             'min_questions': MIN_QUESTIONS,
-            'max_questions': MAX_QUESTIONS,
-            'uses_generator': uses_generator,
-            'generator_info': "🚀 Для этой темы используется быстрый DLL генератор" if uses_generator else "🤖 Будет использован AI (deepseek-r1:7b)"
+            'max_questions': MAX_QUESTIONS
         }
     
     @console.debug(PYTHON_FILENAME)
@@ -299,8 +294,8 @@ class TestingManager:
             num_questions = max(MIN_QUESTIONS, min(MAX_QUESTIONS, int(num_questions)))
             with_options = test_type == 'with_options'
             
-            print(f"[INFO] Генерация теста: {subject}/{section}/{topic}, сложность={difficulty}, "
-                  f"тип={test_type}, вопросов={num_questions}")
+            console.info(f"Генерация теста: {subject}/{section}/{topic}, сложность={difficulty}, "
+                         f"тип={test_type}, вопросов={num_questions}", PYTHON_FILENAME)
             
             # Алгебра - пробуем DLL генератор
             if subject == "Алгебра" and self._is_algebra_topic_supported(topic):
@@ -312,11 +307,11 @@ class TestingManager:
             try:
                 return self._generate_llm_test(subject, section, topic, difficulty, num_questions, with_options)
             except Exception as e:
-                print(f"[WARNING] LLM генерация не удалась: {e}")
+                console.warning(f"LLM генерация не удалась: {e}", PYTHON_FILENAME)
                 return self._generate_local_test(subject, section, topic, difficulty, num_questions, with_options)
                 
         except Exception as e:
-            print(f"[ERROR] Ошибка генерации теста: {e}")
+            console.error(f"Ошибка генерации теста: {e}", PYTHON_FILENAME)
             return self._generate_local_test(subject, section, topic, difficulty, 
                                              num_questions or DEFAULT_NUM_QUESTIONS, 
                                              test_type != 'without_options')
@@ -341,7 +336,7 @@ class TestingManager:
                 questions.append(question)
         
         if not questions:
-            print(f"[WARNING] DLL генератор не создал вопросов для темы: {topic}")
+            console.warning(f"DLL генератор не создал вопросов для темы: {topic}", PYTHON_FILENAME)
             return None
         
         # Дополняем до нужного количества если не хватило
@@ -505,7 +500,7 @@ class TestingManager:
                         question["options"] = q["options"]
                     questions.append(question)
         else:
-            # Генерируем заглушку
+        # Генерируем заглушку
             for i in range(num_questions):
                 question = {
                     "question": f"Вопрос {i+1} по теме '{topic}'",
@@ -575,13 +570,19 @@ class TestingManager:
             
             questions = test['questions']
             
+            console.debug_log(f"Ответы пользователя: {answers}", PYTHON_FILENAME)
+            console.debug_log(f"Количество вопросов: {len(questions)}", PYTHON_FILENAME)
+            
             # Подсчёт правильных ответов
             correct = 0
             detailed_results = []
             
             for i, q in enumerate(questions):
-                user_answer = answers.get(i, answers.get(str(i), ""))
+                # Проверяем оба варианта ключа (строковый и целочисленный)
+                user_answer = answers.get(str(i), answers.get(i, ""))
                 correct_answer = q['correct_answer']
+                
+                console.debug_log(f"Вопрос {i}: ответ пользователя='{user_answer}', правильный='{correct_answer}'", PYTHON_FILENAME)
                 
                 # Для тестов с вариантами - точное сравнение, без вариантов - нормализованное
                 if test_type == 'with_options':
@@ -627,7 +628,7 @@ class TestingManager:
             flask_session.modified = True
             return results
         except Exception as e:
-            print(f"[ERROR] Ошибка подсчёта результатов: {e}")
+            console.error(f"Ошибка подсчёта результатов: {e}", PYTHON_FILENAME)
             return None
     
     @console.debug(PYTHON_FILENAME)

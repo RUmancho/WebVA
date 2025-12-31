@@ -52,27 +52,3 @@ class Algebra:
     @string_handler
     def quadratic_inequality(cls, difficulty):
         return cls.library.quadratic_inequality(difficulty)
-
-# Блок тестов
-import logger.console
-
-@logger.console.debug()
-def t1():
-    # Теперь этот цикл не будет пожирать оперативную память
-    for i in range(100000):
-        Algebra.linear_equation(1)
-
-# Если модуль pt существует и импортируется корректно
-try:
-    import pt
-    @logger.console.debug()
-    def t2():
-        for i in range(100000):
-            pt.linear_equation(1)
-except ImportError:
-    def t2():
-        print("Модуль pt не найден, пропускаю t2")
-
-if __name__ == "__main__":
-    t1()
-    t2()
