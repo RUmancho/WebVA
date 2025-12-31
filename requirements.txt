@@ -1,0 +1,6 @@
+flask
+markdown
+cffi
+langchain
+langchain-ollama
+
