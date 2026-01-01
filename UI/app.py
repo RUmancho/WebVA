@@ -19,7 +19,7 @@ from bot.chatbot import chatbot
 from bot.theory import theory_manager
 from bot.testing import testing_manager
 from formulas import formula_manager
-from logger import console
+from logger.stats import log_info, log_error
 
 PYTHON_FILENAME = "app"
 
@@ -526,7 +526,7 @@ def api_testing_generate_test():
         
         return jsonify({'test': test})
     except Exception as e:
-        console.error(f"Ошибка генерации теста: {e}", PYTHON_FILENAME)
+        log_error(f"Ошибка генерации теста: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
 
@@ -559,7 +559,7 @@ def api_testing_submit_answer():
         
         return jsonify({'success': True})
     except Exception as e:
-        console.error(f"Ошибка сохранения ответа: {e}", PYTHON_FILENAME)
+        log_error(f"Ошибка сохранения ответа: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
 
@@ -588,11 +588,11 @@ def api_testing_submit_all_answers():
         
         session.modified = True
         
-        console.info(f"Сохранено {len(answers)} ответов: {session['testing_state']['user_answers']}", PYTHON_FILENAME)
+        log_info(f"Сохранено {len(answers)} ответов: {session['testing_state']['user_answers']}", PYTHON_FILENAME)
         
         return jsonify({'success': True, 'saved_count': len(answers)})
     except Exception as e:
-        console.error(f"Ошибка сохранения всех ответов: {e}", PYTHON_FILENAME)
+        log_error(f"Ошибка сохранения всех ответов: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
 
@@ -610,7 +610,7 @@ def api_testing_finish_test():
         
         return jsonify({'results': results})
     except Exception as e:
-        console.error(f"Ошибка подсчёта результатов: {e}", PYTHON_FILENAME)
+        log_error(f"Ошибка подсчёта результатов: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
 import logging
