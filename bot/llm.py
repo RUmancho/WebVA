@@ -1,222 +1,169 @@
-import re, os, sys
+"""
+LLM сервис.
+Чистый интерфейс для взаимодействия с языковыми моделями.
+Не содержит путей к промптам или бизнес-логики.
+"""
+
+import os
+import sys
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
+from bot.prompt import Prompt
 from logger import console
 
-python_filename = "llm"
-
-# Пути к папкам промптов
-PROMPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
-ROLES_DIR = os.path.join(PROMPTS_DIR, "roles")
-TASKS_DIR = os.path.join(PROMPTS_DIR, "tasks")
-ANSWERS_DIR = os.path.join(PROMPTS_DIR, "answers")
-
-class Commands:
-    class Student:
-        PROFILE = "профиль"
-        APPLICATIONS = "заявки"
-        MY_TEACHERS = "мои учителя"
-        TASKS = "задания"
-        GET_TASKS = "получить задания"
-        SUBMIT_SOLUTION = "отправить решение"
-        DELETE_PROFILE = "удалить профиль"
-        AI_ASSISTANT = "ai помощник"
-        AI_HELP_WITH_PROBLEM = "помощь с задачей"
-        AI_EXPLAIN_THEORY = "объяснить теорию"
-        AI_TIPS = "получить советы"
-        AI_STUDY_PLAN = "план обучения"
-        AI_CHECK_SOLUTION = "проверить решение"
-        AI_PRACTICE = "практика"
-
-    class Teacher:
-        PROFILE = "профиль"
-        ATTACH_CLASS = "прикрепить класс"
-        MY_STUDENTS = "мои учащиеся"
-        SEND_TASK = "отправить задание"
-        CHECK_TASKS = "проверить задания"
-        SEND_INDIVIDUAL_TASK = "отправить индивидуальное задание"
-        SEND_CLASS_TASK = "отправить задание классу"
-        CHECK_INDIVIDUAL_TASKS = "проверить индивидуальные задания"
-        CLASS_TASKS = "задания для класса"
-        DELETE_PROFILE = "удалить профиль"
-        AI_ASSISTANT = "ai помощник"
-        AI_CREATE_EXPLANATION = "создать объяснение"
-        AI_ANALYZE_STUDENT = "анализ студента"
-        AI_PERSONALIZED_TASK = "персонализированное задание"
-        AI_GENERATE_TASK = "сгенерировать задание"
-        AI_GENERATE_FOR_CLASS = "сгенерировать для класса"
-        AI_CHECK = "ai проверка"
-        ANALYZE_PROGRESS = "анализ прогресса"
-        ATTACH_ALL = "прикрепить всех"
-
-
-class Prompt:
-    def __init__(self, role: str = "", task: str = "", answer: str = ""):
-        self.__prompt_template = "role: {role}\ntask: {task}\nanswer: {answer}"
-        self._prompt = ""
-        
-        # Инициализируем все атрибуты
-        self.__role = ""
-        self.__task = ""
-        self.__answer = ""
-        
-        # Устанавливаем значения через сеттеры
-        if role:
-            self.set_role(role)
-        if task:
-            self.set_task(task)
-        if answer:
-            self.set_answer(answer)
-    
-    def __validator(self, description: str) -> bool:
-        if not isinstance(description, str):
-            raise TypeError("description must be a string")
-        elif len(description) <= 2:
-            raise ValueError("description must be longer than 2 characters")
-        return True
-    
-    def set_role(self, description: str) -> None:
-        if self.__validator(description):
-            self.__role = description
-    
-    def set_task(self, description: str) -> None:
-        if self.__validator(description):
-            self.__task = description
-    
-    def set_answer(self, description: str) -> None:
-        if self.__validator(description):
-            self.__answer = description
-    
-    def get_role(self) -> str:
-        return self.__role
-    
-    def get_task(self) -> str:
-        return self.__task
-    
-    def get_answer(self) -> str:
-        return self.__answer
-    
-    def prompt(self) -> str:
-        if not all([self.__role, self.__task, self.__answer]):
-            raise ValueError("Role, task and answer must be set before generating prompt")
-        
-        self._prompt = self.__prompt_template.format(
-            role=self.__role,
-            task=self.__task,
-            answer=self.__answer
-        )
-        return self._prompt
-    
-    def save(self, filepath: str) -> None:
-        with open(filepath, 'w', encoding="utf-8") as file:
-            file.write(self.prompt())
-    
-    @staticmethod
-    def load(filepath: str) -> str:
-        try:
-            with open(filepath, 'r', encoding="utf-8") as file:
-                return file.read()
-        except FileNotFoundError:
-            raise FileNotFoundError(f"File not found: {filepath}")
-    
-    def create_prompt(self, role_path: str, task_path: str, answer_path: str) -> str:
-        self.set_role(self.load(role_path))
-        self.set_task(self.load(task_path))
-        self.set_answer(self.load(answer_path))
-        return self.prompt()
+PYTHON_FILENAME = "llm"
 
 
 class LLM:
-    def __init__(self, provider, model: str, **kwargs):
-        self.client = provider(model=model, **kwargs)
+    """
+    Базовый класс для работы с LLM.
     
-    @console.debug(python_filename)
-    def ask(self, prompt: Prompt) -> str:
-        """Отправить промпт и получить ответ."""
+    Обеспечивает:
+    - Инициализацию провайдера
+    - Отправку промптов
+    - Обработку ответов
+    """
+    
+    def __init__(self, provider, model: str, **kwargs):
+        """
+        Инициализация LLM.
+        
+        Args:
+            provider: Класс провайдера (например, langchain_ollama.OllamaLLM)
+            model: Название модели
+            **kwargs: Дополнительные параметры для провайдера
+        """
+        self.model = model
+        self.kwargs = kwargs
         try:
-            response = self.client.invoke(prompt.prompt())
-            return response
+            self.client = provider(model=model, **kwargs)
+        except Exception as e:
+            print(f"[ERROR] Ошибка инициализации LLM ({model}): {e}")
+            self.client = None
+    
+    @console.debug(PYTHON_FILENAME)
+    def ask(self, prompt: Prompt) -> str:
+        """
+        Отправить промпт и получить ответ.
+        
+        Args:
+            prompt: Объект Prompt
+            
+        Returns:
+            str: Ответ от LLM
+        """
+        if not self.client:
+            print("[ERROR] LLM клиент не инициализирован")
+            return ""
+        
+        try:
+            prompt_text = prompt.build()
+            response = self.client.invoke(prompt_text)
+            return str(response) if response else ""
         except Exception as e:
             print(f"[ERROR] Ошибка при запросе к LLM: {e}")
             return ""
     
-    @console.debug(python_filename)
-    def calculate(self, expression: str) -> str:
-        normalized = self._normalize_expression(expression)
-        prompt = f"Вычисли следующее выражение и дай только числовой ответ: {normalized}"
+    @console.debug(PYTHON_FILENAME)
+    def ask_raw(self, prompt_text: str) -> str:
+        """
+        Отправить текстовый промпт напрямую.
         
-        response = self.ask(prompt)
-        result = self._extract_number(response)
-        return result
+        Args:
+            prompt_text: Текст промпта
+            
+        Returns:
+            str: Ответ от LLM
+        """
+        if not self.client:
+            print("[ERROR] LLM клиент не инициализирован")
+            return ""
+        
+        try:
+            response = self.client.invoke(prompt_text)
+            return str(response) if response else ""
+        except Exception as e:
+            print(f"[ERROR] Ошибка при запросе к LLM: {e}")
+            return ""
     
-    @console.debug(python_filename)
-    def _normalize_expression(self, expr: str) -> str:
-        expr = expr.lower().strip()
-        replacements = {
-            "squared": "^2",
-            "cubed": "^3",
-            "to the power of": "^",
-            "square root of": "sqrt",
-            "divided by": "/",
-            "times": "*",
-            "в квадрате": "^2",
-            "в кубе": "^3",
-            "в степени": "^",
-            "корень из": "sqrt",
-            "делить на": "/",
-            "умножить на": "*",
-            "плюс": "+",
-            "минус": "-"
-        }
-        for k, v in replacements.items():
-            expr = expr.replace(k, v)
-        return expr
+    @console.debug(PYTHON_FILENAME)
+    def ask_with_params(self, prompt: Prompt, **params) -> str:
+        """
+        Отправить промпт с подстановкой параметров.
+        
+        Args:
+            prompt: Объект Prompt с плейсхолдерами
+            **params: Параметры для подстановки
+            
+        Returns:
+            str: Ответ от LLM
+        """
+        parameterized_prompt = prompt.with_params(**params)
+        return self.ask(parameterized_prompt)
     
-    @console.debug(python_filename)
-    def _extract_number(self, text: str) -> str:
-        """Извлекает число из текста ответа."""
-        matches = re.findall(r"-?\d+\.?\d*", text)
-        return matches[0] if matches else text
+    def is_available(self) -> bool:
+        """Проверяет доступность LLM."""
+        return self.client is not None
+
 
 class AcademicLLM(LLM):
-    """LLM для академических задач с предзагруженными промптами."""
+    """
+    LLM для академических/образовательных задач.
+    Расширяет базовый LLM дополнительной функциональностью.
+    """
     
-    class Tasks:
-        """Пути к файлам задач."""
-        HELP_PROBLEM = os.path.join(TASKS_DIR, "help_problem.txt")
-        EXPLAIN = os.path.join(TASKS_DIR, "explain.txt")
-        TIPS = os.path.join(TASKS_DIR, "tips.txt")
-        PLAN = os.path.join(TASKS_DIR, "plan.txt")
-        CHECK_SOLUTION = os.path.join(TASKS_DIR, "check_solution.txt")
-        PRACTICE = os.path.join(TASKS_DIR, "practice.txt")
-        GENERATE_TASK = os.path.join(TASKS_DIR, "generate_task.txt")
-        COMPUTATIONAL_SKILLS = os.path.join(TASKS_DIR, "computational_skills.txt")
-        EXPRESSION_VALUE = os.path.join(TASKS_DIR, "expression_value.txt")
-        FORMULAS_WORK = os.path.join(TASKS_DIR, "formulas_work.txt")
-        SHORTHAND_FORMULAS = os.path.join(TASKS_DIR, "shorthand_formulas.txt")
-        EQUATIONS = os.path.join(TASKS_DIR, "equations.txt")
-        INEQUALITIES = os.path.join(TASKS_DIR, "inequalities.txt")
-        GRAPHS = os.path.join(TASKS_DIR, "graphs.txt")
-        TRIGONOMETRY = os.path.join(TASKS_DIR, "trigonometry.txt")
-        PROBABILITY = os.path.join(TASKS_DIR, "probability.txt")
-        TRIANGLES = os.path.join(TASKS_DIR, "triangles.txt")
-        QUADRILATERALS = os.path.join(TASKS_DIR, "quadrilaterals.txt")
-        CIRCLES = os.path.join(TASKS_DIR, "circles.txt")
-        AREAS_VOLUMES = os.path.join(TASKS_DIR, "areas_volumes.txt")
-        COORDINATE_GEOMETRY = os.path.join(TASKS_DIR, "coordinate_geometry.txt")
-    
-    class Roles:
-        """Пути к файлам ролей."""
-        MATH_TEACHER = os.path.join(ROLES_DIR, "math_teacher.txt")
-        CHAT_HELPER = os.path.join(ROLES_DIR, "chat_helper.txt")
-    
-    class Answers:
-        """Пути к файлам форматов ответа."""
-        CALCULATION = os.path.join(ANSWERS_DIR, "calculation.txt")
-        CONCISE = os.path.join(ANSWERS_DIR, "concise.txt")
-        DETAILED = os.path.join(ANSWERS_DIR, "detailed.txt")
-
     def __init__(self, provider, model: str, **kwargs):
         super().__init__(provider, model, **kwargs)
+    
+    @console.debug(PYTHON_FILENAME)
+    def explain(self, prompt: Prompt) -> str:
+        """
+        Получить объяснение темы.
+        
+        Args:
+            prompt: Промпт для объяснения
+            
+        Returns:
+            str: Текст объяснения
+        """
+        response = self.ask(prompt)
+        return self._clean_response(response)
+    
+    @console.debug(PYTHON_FILENAME)
+    def generate_tasks(self, prompt: Prompt, count: int = 5) -> str:
+        """
+        Сгенерировать задания.
+        
+        Args:
+            prompt: Промпт для генерации
+            count: Количество заданий
+            
+        Returns:
+            str: Сгенерированные задания
+        """
+        response = self.ask_with_params(prompt, n=count)
+        return self._clean_response(response)
+    
+    def _clean_response(self, response: str) -> str:
+        """
+        Очистка ответа от служебных тегов.
+        
+        Args:
+            response: Ответ от LLM
+            
+        Returns:
+            str: Очищенный ответ
+        """
+        if not response:
+            return ""
+        
+        import re
+        
+        # Удаляем теги размышлений deepseek-r1
+        cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'<reasoning>.*?</reasoning>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        
+        return cleaned.strip()

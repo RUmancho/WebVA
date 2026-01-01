@@ -8,13 +8,13 @@ if project_root not in sys.path:
 from database.settings import USER_ROLES
 from LibraryManager import loader
 
-MIN_PASSWORD_LENGTH = 15
 
 VALIDATOR_DIR = os.path.dirname(os.path.abspath(__file__))
 VALIDATOR_DLL = loader.Library("validator", os.path.join(VALIDATOR_DIR, "validator.h"), VALIDATOR_DIR)
 
 
 class Validator:
+    MIN_PASSWORD_LENGTH = 15
     """Класс для валидации пользовательских данных"""
     
     is_name = lambda line: VALIDATOR_DLL.lib.is_name(line)

@@ -14,8 +14,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from flask import session as flask_session
-from bot.llm import Prompt
-from bot import chat  # Импортируем модуль с готовым LLM
+from bot.prompt import Prompt
+from bot import chat  
 from bot import topics
 from logger import console
 

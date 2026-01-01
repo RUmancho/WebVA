@@ -1,21 +1,18 @@
 """
-Модуль для работы с LLM напрямую (без Flask).
-Автоматически запускает Ollama сервер если он не запущен.
+Модуль чата с LLM.
+Использует LLM сервис и реестр промптов.
 """
 
 import os
 import sys
-import socket
-import subprocess
-import time
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 import langchain_ollama
-from bot import llm
-from bot.prompts import Math
+from bot.llm import AcademicLLM
+from bot.prompt_registry import Math
 from logger import console
 
 PYTHON_FILENAME = "chat"
@@ -28,64 +25,18 @@ TEMPERATURE = 0.0
 OLLAMA_HOST = "localhost"
 OLLAMA_PORT = 11434
 
-# ========================== АВТОЗАПУСК OLLAMA ==========================
-
-def _is_ollama_running() -> bool:
-    """Проверка работает ли Ollama сервер"""
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
-        result = sock.connect_ex((OLLAMA_HOST, OLLAMA_PORT))
-        sock.close()
-        return result == 0
-    except Exception:
-        return False
-
-
-def _start_ollama_server():
-    """Автоматический запуск Ollama сервера в фоне"""
-    if _is_ollama_running():
-        return True
-    
-    try:
-        # Запускаем ollama serve в фоновом режиме
-        if sys.platform == "win32":
-            subprocess.Popen(
-                ["ollama", "serve"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
-        else:
-            subprocess.Popen(
-                ["ollama", "serve"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-        
-        # Ждём запуска сервера (макс 10 секунд)
-        for _ in range(10):
-            time.sleep(1)
-            if _is_ollama_running():
-                return True
-        
-        return False
-    except Exception:
-        return False
-
-
-# Автозапуск при импорте модуля
-_start_ollama_server()
 
 # ========================== ИНИЦИАЛИЗАЦИЯ LLM ==========================
 
-academic = llm.AcademicLLM(
-    langchain_ollama.OllamaLLM, 
-    MODEL_NAME, 
-    num_thread=NUM_THREADS, 
+academic = AcademicLLM(
+    langchain_ollama.OllamaLLM,
+    MODEL_NAME,
+    num_thread=NUM_THREADS,
     temperature=TEMPERATURE
 )
 
+
+# ========================== API ФУНКЦИИ ==========================
 
 @console.debug(PYTHON_FILENAME)
 def explain_theory(topic: str) -> str:
@@ -94,7 +45,7 @@ def explain_theory(topic: str) -> str:
     
     Args:
         topic: Название темы (linear_equations, fractions, и т.д.)
-    
+        
     Returns:
         str: Объяснение теории
     """
@@ -116,14 +67,16 @@ def explain_theory(topic: str) -> str:
         "probability": Math.Theory.probability,
     }
     
-    prompt = topics_map.get(topic)
-    if not prompt:
+    prompt_factory = topics_map.get(topic)
+    if not prompt_factory:
+        print(f"[WARN] Неизвестная тема: {topic}")
         return ""
     
     try:
-        response = academic.ask(prompt)
-        return response
+        prompt = prompt_factory()
+        return academic.explain(prompt)
     except Exception as e:
+        print(f"[ERROR] Ошибка генерации теории для {topic}: {e}")
         return ""
 
 
@@ -136,7 +89,7 @@ def generate_tasks(topic: str, difficulty: str, n: int) -> str:
         topic: Название темы
         difficulty: Уровень сложности (easy, standard, hard)
         n: Количество заданий
-    
+        
     Returns:
         str: Сгенерированные задания
     """
@@ -180,14 +133,17 @@ def generate_tasks(topic: str, difficulty: str, n: int) -> str:
     
     topics = difficulty_map.get(difficulty)
     if not topics:
+        print(f"[WARN] Неизвестная сложность: {difficulty}")
         return ""
     
-    prompt = topics.get(topic)
-    if not prompt:
+    prompt_factory = topics.get(topic)
+    if not prompt_factory:
+        print(f"[WARN] Неизвестная тема {topic} для сложности {difficulty}")
         return ""
     
     try:
-        response = academic.ask_with_params(prompt, n=n)
-        return response
-    except Exception:
+        prompt = prompt_factory()
+        return academic.generate_tasks(prompt, count=n)
+    except Exception as e:
+        print(f"[ERROR] Ошибка генерации заданий: {e}")
         return ""

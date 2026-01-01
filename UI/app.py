@@ -15,10 +15,8 @@ if str(project_root) not in sys.path:
 
 from database.auth import auth_manager
 from database.database import db
-from bot.chatbot import chatbot
 from bot.theory import theory_manager
 from bot.testing import testing_manager
-from formulas import formula_manager
 from logger.stats import log_info, log_error
 
 PYTHON_FILENAME = "app"

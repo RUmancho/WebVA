@@ -1,146 +1,96 @@
 {% extends "base.html" %}
 
 {% block content %}
-<nav class="navbar navbar-dark mb-4">
-    <div class="container-fluid">
-        <span class="navbar-brand mb-0 h1">🎓 {{ page_title }}</span>
-        <div class="d-flex align-items-center">
-            <button class="theme-toggle me-3" onclick="ThemeManager.toggle()" title="Переключить тему">
-                <i class="bi bi-sun-fill theme-icon-light"></i>
-                <i class="bi bi-moon-fill theme-icon-dark"></i>
-            </button>
-            <span class="text-white me-3">Добро пожаловать, {{ user.first_name }}! 👋</span>
-            <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">🚪 Выйти</a>
-        </div>
-    </div>
-</nav>
+<style>
+    .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 10px 0; border-bottom: 1px solid var(--border-color); }
+    .dashboard-title { font-size: 1.5rem; font-weight: bold; color: var(--text-primary); }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .profile-btn { background: var(--bg-sidebar); border: 1px solid var(--border-color); border-radius: 50%; width: 40px; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: all 0.2s; }
+    .profile-btn:hover { background: var(--nav-active-bg); color: #fff; }
+    .nav-tabs-horizontal { display: flex; flex-wrap: wrap; list-style: none; padding: 0; margin: 0 0 20px 0; border-bottom: 2px solid var(--border-color); gap: 5px; }
+    .nav-tabs-horizontal .nav-link { display: inline-block; padding: 10px 15px; text-decoration: none; border-radius: 8px 8px 0 0; background: var(--bg-sidebar); color: var(--text-primary); border: none; cursor: pointer; transition: all 0.2s; font-size: 14px; }
+    .nav-tabs-horizontal .nav-link:hover { background: var(--nav-active-bg); color: #fff; }
+    .nav-tabs-horizontal .nav-link.active { background: var(--nav-active-bg); color: #fff; }
+    .profile-dropdown { display: none; position: absolute; right: 0; top: 50px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 10px; padding: 20px; min-width: 280px; box-shadow: 0 5px 20px var(--card-shadow); z-index: 1000; }
+    .profile-dropdown.show { display: block; }
+    .profile-dropdown h4 { margin: 0 0 15px 0; color: var(--text-primary); }
+    .profile-dropdown p { margin: 5px 0; color: var(--text-secondary); }
+    .profile-dropdown hr { border-color: var(--border-color); margin: 15px 0; }
+    .header-actions { position: relative; }
+</style>
 
-<div class="row">
-    <!-- Боковая панель -->
-    <div class="col-md-3">
-        <div class="sidebar">
-            <h5>👤 Профиль</h5>
-            <p><strong>{{ user.first_name }} {{ user.last_name }}</strong></p>
-            <p>Роль: {{ user.role }}</p>
-            <p>Email: {{ user.email }}</p>
-            
+<div class="dashboard-header">
+    <div class="dashboard-title">🎓 Система обучения</div>
+    <div class="header-actions">
+        <button class="theme-toggle" onclick="ThemeManager.toggle()" title="Переключить тему">
+            <i class="bi bi-sun-fill theme-icon-light"></i>
+            <i class="bi bi-moon-fill theme-icon-dark"></i>
+        </button>
+        <button class="profile-btn" onclick="toggleProfile()" title="Профиль">👤</button>
+        <div class="profile-dropdown" id="profileDropdown">
+            <h4>👤 {{ user.first_name }} {{ user.last_name }}</h4>
+            <p><strong>Роль:</strong> {{ user.role }}</p>
+            <p><strong>Email:</strong> {{ user.email }}</p>
             {% if user.role == 'Ученик' %}
-                <p>Город: {{ user.city or 'Не указан' }}</p>
-                <p>Школа: {{ user.school or 'Не указана' }}</p>
-                <p>Класс: {{ user.class_number or 'Не указан' }}</p>
+                <p><strong>Школа:</strong> {{ user.school or 'Не указана' }}</p>
+                <p><strong>Класс:</strong> {{ user.class_number or 'Не указан' }}</p>
+                <p><strong>Город:</strong> {{ user.city or 'Не указан' }}</p>
             {% elif user.role == 'Учитель' %}
-                <p>Город: {{ user.city or 'Не указан' }}</p>
-                <p>Школа: {{ user.school or 'Не указана' }}</p>
-                {% if user.subjects %}
-                    <p>Предметы: {{ user.subjects }}</p>
-                {% endif %}
+                <p><strong>Школа:</strong> {{ user.school or 'Не указана' }}</p>
+                <p><strong>Город:</strong> {{ user.city or 'Не указан' }}</p>
+                <p><strong>Предметы:</strong> {{ user.subjects or 'Не указаны' }}</p>
             {% endif %}
-            
             <hr>
-            <a href="{{ url_for('logout') }}" class="btn btn-danger w-100 mb-2">🚪 Выйти</a>
-        </div>
-    </div>
-    
-    <!-- Основной контент -->
-    <div class="col-md-9">
-        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'home' %}active{% endif %}" 
-                        onclick="showTab('home')" type="button">🏠 Главная</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'assignments' %}active{% endif %}" 
-                        onclick="showTab('assignments')" type="button">📋 Задания</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'teachers' %}active{% endif %}" 
-                        onclick="showTab('teachers')" type="button">👨‍🏫 Учителя</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'chat' %}active{% endif %}" 
-                        onclick="showTab('chat')" type="button">💬 Чат-помощник</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'theory' %}active{% endif %}" 
-                        onclick="showTab('theory')" type="button">📚 Теория</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'testing' %}active{% endif %}" 
-                        onclick="showTab('testing')" type="button">📝 Тестирование</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'formulas' %}active{% endif %}" 
-                        onclick="showTab('formulas')" type="button">📐 Формулы</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'notifications' %}active{% endif %}" 
-                        onclick="showTab('notifications')" type="button">🔔 Уведомления</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'personal_chat' %}active{% endif %}" 
-                        onclick="showTab('personal_chat')" type="button">💭 Чат</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'requests' %}active{% endif %}" 
-                        onclick="showTab('requests')" type="button">📋 Заявки</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'calls' %}active{% endif %}" 
-                        onclick="showTab('calls')" type="button">📞 Звонки</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'lessons' %}active{% endif %}" 
-                        onclick="showTab('lessons')" type="button">🎥 Записи</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'settings' %}active{% endif %}" 
-                        onclick="showTab('settings')" type="button">⚙️ Настройки</button>
-            </li>
-        </ul>
-        
-        <div class="tab-content mt-4">
-            <div id="home" class="tab-pane {% if active_tab == 'home' %}active{% endif %}">
-                {% include 'dashboard/home.html' %}
-            </div>
-            <div id="assignments" class="tab-pane {% if active_tab == 'assignments' %}active{% endif %}">
-                {% include 'dashboard/assignments.html' %}
-            </div>
-            <div id="teachers" class="tab-pane {% if active_tab == 'teachers' %}active{% endif %}">
-                {% include 'dashboard/teachers.html' %}
-            </div>
-            <div id="chat" class="tab-pane {% if active_tab == 'chat' %}active{% endif %}">
-                {% include 'dashboard/chat.html' %}
-            </div>
-            <div id="theory" class="tab-pane {% if active_tab == 'theory' %}active{% endif %}">
-                {% include 'dashboard/theory.html' %}
-            </div>
-            <div id="testing" class="tab-pane {% if active_tab == 'testing' %}active{% endif %}">
-                {% include 'dashboard/testing.html' %}
-            </div>
-            <div id="formulas" class="tab-pane {% if active_tab == 'formulas' %}active{% endif %}">
-                {% include 'dashboard/formulas.html' %}
-            </div>
-            <div id="notifications" class="tab-pane {% if active_tab == 'notifications' %}active{% endif %}">
-                {% include 'dashboard/notifications.html' %}
-            </div>
-            <div id="personal_chat" class="tab-pane {% if active_tab == 'personal_chat' %}active{% endif %}">
-                {% include 'dashboard/personal_chat.html' %}
-            </div>
-            <div id="requests" class="tab-pane {% if active_tab == 'requests' %}active{% endif %}">
-                {% include 'dashboard/requests.html' %}
-            </div>
-            <div id="calls" class="tab-pane {% if active_tab == 'calls' %}active{% endif %}">
-                {% include 'dashboard/calls.html' %}
-            </div>
-            <div id="lessons" class="tab-pane {% if active_tab == 'lessons' %}active{% endif %}">
-                {% include 'dashboard/lessons.html' %}
-            </div>
-            <div id="settings" class="tab-pane {% if active_tab == 'settings' %}active{% endif %}">
-                {% include 'dashboard/settings.html' %}
-            </div>
+            <a href="{{ url_for('logout') }}" class="btn btn-danger" style="width:100%;">🚪 Выйти</a>
         </div>
     </div>
 </div>
+
+<!-- Навигация -->
+<div class="nav-tabs-horizontal" id="mainTabs">
+    <button class="nav-link {% if active_tab == 'chat' or active_tab == 'home' %}active{% endif %}" onclick="showTab('chat')">💬 Чат-помощник</button>
+    <button class="nav-link {% if active_tab == 'theory' %}active{% endif %}" onclick="showTab('theory')">📚 Теория</button>
+    <button class="nav-link {% if active_tab == 'testing' %}active{% endif %}" onclick="showTab('testing')">📝 Тестирование</button>
+    <button class="nav-link {% if active_tab == 'formulas' %}active{% endif %}" onclick="showTab('formulas')">📐 Формулы</button>
+    <button class="nav-link {% if active_tab == 'teachers' %}active{% endif %}" onclick="showTab('teachers')">👨‍🏫 Учителя</button>
+    <button class="nav-link {% if active_tab == 'assignments' %}active{% endif %}" onclick="showTab('assignments')">📋 Задания</button>
+    <button class="nav-link {% if active_tab == 'notifications' %}active{% endif %}" onclick="showTab('notifications')">🔔 Уведомления</button>
+    <button class="nav-link {% if active_tab == 'personal_chat' %}active{% endif %}" onclick="showTab('personal_chat')">💭 Чат</button>
+    <button class="nav-link {% if active_tab == 'requests' %}active{% endif %}" onclick="showTab('requests')">📋 Заявки</button>
+    <button class="nav-link {% if active_tab == 'calls' %}active{% endif %}" onclick="showTab('calls')">📞 Звонки</button>
+    <button class="nav-link {% if active_tab == 'lessons' %}active{% endif %}" onclick="showTab('lessons')">🎥 Записи</button>
+    <button class="nav-link {% if active_tab == 'settings' %}active{% endif %}" onclick="showTab('settings')">⚙️ Настройки</button>
+</div>
+
+<!-- Контент -->
+<div class="tab-content">
+    <div id="chat" class="tab-pane {% if active_tab == 'chat' or active_tab == 'home' %}active{% endif %}">{% include 'dashboard/chat.html' %}</div>
+    <div id="assignments" class="tab-pane {% if active_tab == 'assignments' %}active{% endif %}">{% include 'dashboard/assignments.html' %}</div>
+    <div id="teachers" class="tab-pane {% if active_tab == 'teachers' %}active{% endif %}">{% include 'dashboard/teachers.html' %}</div>
+    <div id="theory" class="tab-pane {% if active_tab == 'theory' %}active{% endif %}">{% include 'dashboard/theory.html' %}</div>
+    <div id="testing" class="tab-pane {% if active_tab == 'testing' %}active{% endif %}">{% include 'dashboard/testing.html' %}</div>
+    <div id="formulas" class="tab-pane {% if active_tab == 'formulas' %}active{% endif %}">{% include 'dashboard/formulas.html' %}</div>
+    <div id="notifications" class="tab-pane {% if active_tab == 'notifications' %}active{% endif %}">{% include 'dashboard/notifications.html' %}</div>
+    <div id="personal_chat" class="tab-pane {% if active_tab == 'personal_chat' %}active{% endif %}">{% include 'dashboard/personal_chat.html' %}</div>
+    <div id="requests" class="tab-pane {% if active_tab == 'requests' %}active{% endif %}">{% include 'dashboard/requests.html' %}</div>
+    <div id="calls" class="tab-pane {% if active_tab == 'calls' %}active{% endif %}">{% include 'dashboard/calls.html' %}</div>
+    <div id="lessons" class="tab-pane {% if active_tab == 'lessons' %}active{% endif %}">{% include 'dashboard/lessons.html' %}</div>
+    <div id="settings" class="tab-pane {% if active_tab == 'settings' %}active{% endif %}">{% include 'dashboard/settings.html' %}</div>
+</div>
+
+<script>
+function toggleProfile() {
+    const dropdown = document.getElementById('profileDropdown');
+    dropdown.classList.toggle('show');
+}
+document.addEventListener('click', function(e) {
+    const dropdown = document.getElementById('profileDropdown');
+    const btn = document.querySelector('.profile-btn');
+    if (!dropdown.contains(e.target) && e.target !== btn) {
+        dropdown.classList.remove('show');
+    }
+});
+</script>
 {% endblock %}
 
 {% block extra_js %}

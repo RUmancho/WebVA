@@ -1,27 +1,34 @@
+"""
+Высокоуровневый AI интерфейс.
+Предоставляет ChatBot и другие AI-сервисы приложению.
+"""
+
 import os
 import sys
 import re
-from flask import session
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from logger import console
-from bot import chat  # Импортируем модуль с готовым LLM
-from bot.llm import Prompt
-from bot.prompts import Math
+from flask import session
 
-PYTHON_FILENAME = "chatbot"
+from bot.prompt import Prompt
+from bot.prompt_registry import Math
+from bot import chat
+from logger import console
+
+PYTHON_FILENAME = "AI"
 
 
 class ChatBot:
     """Чат-бот для взаимодействия с пользователем."""
     
+    CURSOR_VARIANTS = ["▌", "▋", "▊", "▉", "█", "▐", "▎", "▍"]
+    
     def __init__(self):
         self.llm = chat.academic
     
-    @console.debug(PYTHON_FILENAME)
     def init_chat_session(self):
         """Инициализация сессии чата."""
         if 'chat_messages' not in session:
@@ -37,13 +44,11 @@ class ChatBot:
         })
         session.modified = True
     
-    @console.debug(PYTHON_FILENAME)
     def get_chat_history(self) -> list:
         """Получить историю чата."""
         self.init_chat_session()
         return session.get('chat_messages', [])
     
-    @console.debug(PYTHON_FILENAME)
     def clear_chat_history(self):
         """Очистить историю чата."""
         session['chat_messages'] = []
@@ -56,12 +61,11 @@ class ChatBot:
         
         Args:
             user_message: Сообщение пользователя
-        
+            
         Returns:
             str: Ответ бота
         """
         try:
-            # Создаём промпт для чата
             prompt = Prompt(
                 role="Ты дружелюбный AI-помощник по обучению. Отвечай на русском языке, используй Markdown форматирование. НЕ используй LaTeX ($$ или $)!",
                 task=f"Ответь на вопрос пользователя: {user_message}",
@@ -69,28 +73,31 @@ class ChatBot:
             )
             
             response = self.llm.ask(prompt)
-            
-            # Очищаем ответ от тегов размышлений deepseek
             response = self._clean_response(response)
             
             return response if response else self._get_fallback_response(user_message)
             
-        except Exception:
+        except Exception as e:
+            print(f"[ERROR] Ошибка получения ответа бота: {e}")
             return self._get_fallback_response(user_message)
     
-    @console.debug(PYTHON_FILENAME)
     def _clean_response(self, response: str) -> str:
         """Очистить ответ от служебных тегов."""
         if not response:
             return ""
         
-        # Удаляем теги <think>...</think> от deepseek-r1
-        response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-        response = response.strip()
+        cleaned = str(response)
         
-        return response
+        # Удаляем курсоры
+        for cursor in self.CURSOR_VARIANTS:
+            cleaned = cleaned.replace(cursor, "")
+        
+        # Удаляем теги <think>...</think> от deepseek-r1
+        cleaned = re.sub(r'<think>.*?</think>', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'<reasoning>.*?</reasoning>', '', cleaned, flags=re.DOTALL)
+        
+        return cleaned.strip()
     
-    @console.debug(PYTHON_FILENAME)
     def _get_fallback_response(self, user_message: str) -> str:
         """Заглушка ответа когда LLM недоступен."""
         user_lower = user_message.lower()
@@ -113,7 +120,7 @@ class ChatBot:
         
         Args:
             topic: Название темы
-        
+            
         Returns:
             str: Объяснение теории
         """
@@ -135,11 +142,12 @@ class ChatBot:
             "probability": Math.Theory.probability,
         }
         
-        prompt = topics_map.get(topic)
-        if not prompt:
+        prompt_factory = topics_map.get(topic)
+        if not prompt_factory:
             return f"Неизвестная тема: {topic}"
         
         try:
+            prompt = prompt_factory()
             response = self.llm.ask(prompt)
             return self._clean_response(response)
         except Exception as e:
