@@ -1,8 +1,9 @@
 import sys
 from pathlib import Path
 from flask import *
-from datetime import datetime
 import os
+
+from sqlalchemy.sql.expression import False_
 
 # Получаем абсолютный путь к файлу и его родительскую директорию
 current_file = Path(__file__).resolve()
@@ -612,6 +613,10 @@ def api_testing_finish_test():
         console.error(f"Ошибка подсчёта результатов: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
+import logging
 
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.logger.disabled = True
+    app.run(host='0.0.0.0', port=5000, debug = False)
