@@ -1,1 +1,136 @@
-<div class="card"><div class="card-body"><h2 class="card-title">📚 Теоретические материалы</h2><div id="theory-loading" class="text-center" style="display: none;"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div></div><div id="theory-error" class="alert alert-danger" style="display: none;"></div><nav id="theory-breadcrumbs" aria-label="breadcrumb" style="display: none;"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="#" onclick="theoryNavigate('subjects'); return false;">Предметы</a></li></ol></nav><div id="theory-content"><div id="theory-subjects" class="theory-page"><h4>Выберите предмет:</h4><div class="row" id="subjects-list"></div></div><div id="theory-sections" class="theory-page" style="display: none;"><h4 id="sections-title"></h4><div class="list-group" id="sections-list"></div></div><div id="theory-topics" class="theory-page" style="display: none;"><h4 id="topics-title"></h4><div class="list-group" id="topics-list"></div></div><div id="theory-explanation" class="theory-page" style="display: none;"><div class="d-flex justify-content-between align-items-center mb-3"><h4 id="explanation-title"></h4><button class="btn btn-sm btn-outline-primary" onclick="regenerateExplanation()"> 🔄 Получить другое объяснение </button></div><div id="explanation-content" class="card"><div class="card-body"><div id="explanation-loading" class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Генерация объяснения...</span></div><p class="mt-2">Генерирую объяснение с помощью deepseek-r1:7b...</p></div><div id="explanation-text" style="display: none;"></div></div></div></div></div></div></div>
+<div class="card">
+    <div class="card-body">
+        <h2 class="card-title">📚 Теоретические материалы</h2>
+        
+        <!-- Индикатор загрузки -->
+        <div id="theory-loading" class="text-center" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+        </div>
+        
+        <!-- Ошибки -->
+        <div id="theory-error" class="alert alert-danger" style="display: none;"></div>
+        
+        <!-- Хлебные крошки -->
+        <nav id="theory-breadcrumbs" aria-label="breadcrumb" style="display: none;">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item">
+                    <a href="#" onclick="theoryNavigate('subjects'); return false;">Предметы</a>
+                </li>
+            </ol>
+        </nav>
+        
+        <!-- Контент теории -->
+        <div id="theory-content">
+            
+            <!-- 1. Выбор предмета -->
+            <div id="theory-subjects" class="theory-page">
+                <h4>Выберите предмет:</h4>
+                <div class="row" id="subjects-list"></div>
+            </div>
+            
+            <!-- 2. Выбор раздела -->
+            <div id="theory-sections" class="theory-page" style="display: none;">
+                <h4 id="sections-title"></h4>
+                <div class="list-group" id="sections-list"></div>
+            </div>
+            
+            <!-- 3. Выбор темы -->
+            <div id="theory-topics" class="theory-page" style="display: none;">
+                <h4 id="topics-title"></h4>
+                <div class="list-group" id="topics-list"></div>
+            </div>
+            
+            <!-- 4. Объяснение темы -->
+            <div id="theory-explanation" class="theory-page" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 id="explanation-title"></h4>
+                    <button class="btn btn-sm btn-outline-primary" onclick="regenerateExplanation()">
+                        🔄 Получить другое объяснение
+                    </button>
+                </div>
+                
+                <div id="explanation-content" class="card">
+                    <div class="card-body">
+                        <div id="explanation-loading" class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Генерация объяснения...</span>
+                            </div>
+                            <p class="mt-2">Генерирую объяснение с помощью LLM...</p>
+                        </div>
+                        <div id="explanation-text" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+</div>
+
+<!-- Стили для теории -->
+<style>
+.theory-page {
+    will-change: opacity;
+}
+
+.subject-card {
+    transition: all 0.3s ease;
+    cursor: pointer;
+    min-height: 120px;
+    border: 2px solid transparent;
+}
+
+.subject-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+    border-color: #667eea;
+}
+
+#explanation-text {
+    font-size: 1.05rem;
+    line-height: 1.7;
+}
+
+#explanation-text h1, 
+#explanation-text h2 {
+    color: #667eea;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+#explanation-text h3, 
+#explanation-text h4 {
+    color: #764ba2;
+    margin-top: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+#explanation-text ul,
+#explanation-text ol {
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+#explanation-text code {
+    background: rgba(102, 126, 234, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+#explanation-text pre {
+    background: rgba(102, 126, 234, 0.05);
+    border-left: 4px solid #667eea;
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+}
+
+#explanation-text blockquote {
+    border-left: 4px solid #764ba2;
+    padding-left: 15px;
+    color: #6c757d;
+    font-style: italic;
+}
+</style>

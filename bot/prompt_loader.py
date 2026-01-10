@@ -13,6 +13,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from logger import console
+from logger.tracer import trace
 
 PYTHON_FILENAME = "prompt_loader"
 
@@ -35,7 +36,7 @@ class PromptLoader:
     _cache: Dict[str, str] = {}
     
     @classmethod
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def load(cls, filepath: str) -> str:
         """
         Загружает содержимое файла промпта.
@@ -69,7 +70,7 @@ class PromptLoader:
             raise PromptLoaderError(f"Ошибка чтения: {e}")
     
     @classmethod
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def load_safe(cls, filepath: str, default: str = "") -> str:
         """
         Безопасная загрузка промпта (без исключений).
@@ -87,7 +88,7 @@ class PromptLoader:
             return default
     
     @classmethod
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def load_with_params(cls, filepath: str, **kwargs) -> str:
         """
         Загружает промпт и подставляет параметры.

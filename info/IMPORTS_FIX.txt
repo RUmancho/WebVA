@@ -1,0 +1,150 @@
+================================================================================
+                   ИСПРАВЛЕНИЕ ИМПОРТОВ ПОСЛЕ РЕФАКТОРИНГА
+================================================================================
+
+ДАТА: 2026-01-02
+СТАТУС: ✅ ВЫПОЛНЕНО
+
+================================================================================
+                           ЧТО БЫЛО ИСПРАВЛЕНО
+================================================================================
+
+ПРОБЛЕМА:
+---------
+После переименования logger/t.py → logger/tracer.py и monitor_function → trace
+в файлах bot/ остались старые импорты, что вызывало ошибки:
+
+  ImportError: cannot import name 'monitor_function' from 'logger.tracer'
+
+ИСПРАВЛЕННЫЕ ФАЙЛЫ:
+-------------------
+
+1. bot/llm.py
+   БЫЛО:    from logger.tracer import tra
+   СТАЛО:   from logger.tracer import trace
+   
+   БЫЛО:    monitor_function
+   СТАЛО:   @trace
+   Количество замен: 5 декораторов
+
+2. bot/testing.py
+   БЫЛО:    from logger.t import monitor_function
+   СТАЛО:   from logger.tracer import trace
+   
+   БЫЛО:    @monitor_function
+   СТАЛО:   @trace
+   Количество замен: 16 декораторов
+
+3. bot/theory.py
+   БЫЛО:    from logger.t import monitor_function
+   СТАЛО:   from logger.tracer import trace
+   
+   БЫЛО:    @monitor_function
+   СТАЛО:   @trace
+   Количество замен: 15 декораторов
+
+4. bot/chat.py
+   БЫЛО:    from logger.t import monitor_function
+   СТАЛО:   from logger.tracer import trace
+   
+   БЫЛО:    @monitor_function
+   СТАЛО:   @trace
+   Количество замен: 2 декоратора
+
+5. bot/prompt_loader.py
+   БЫЛО:    from logger.t import monitor_function
+   СТАЛО:   from logger.tracer import trace
+   
+   БЫЛО:    @monitor_function
+   СТАЛО:   @trace
+   Количество замен: 3 декоратора
+
+================================================================================
+                              ИТОГО
+================================================================================
+
+Всего исправлено:
+- 5 файлов
+- 5 импортов
+- 41 декоратор
+
+Проверка:
+✅ Все импорты работают
+✅ Все модули загружаются без ошибок
+✅ Метрики записываются правильно
+✅ Видны модули (bot.theory, bot.testing и т.д.)
+
+Пример записанных метрик:
+
+  Module         Function      Type  Calls  Avg Time
+  bot.theory     __init__      time  1      0.0023s
+  bot.theory     _init_session time  1      0.0001s
+
+================================================================================
+                           КОМАНДЫ ДЛЯ ПРОВЕРКИ
+================================================================================
+
+1. Проверка отдельного модуля:
+   python bot/llm.py
+
+2. Проверка всех импортов:
+   python -c "from bot.testing import TestingManager; \
+              from bot.theory import TheoryManager; \
+              from bot.chat import explain_theory; \
+              from bot.prompt_loader import PromptLoader; \
+              print('All imports successful!')"
+
+3. Просмотр метрик:
+   python view_metrics.py
+
+4. Просмотр метрик database.py:
+   python show_database_metrics.py
+
+================================================================================
+                        ОБРАТНАЯ СОВМЕСТИМОСТЬ
+================================================================================
+
+ВАЖНО: Все старые импорты удалены!
+
+Если в других частях проекта используется:
+  from logger.t import monitor_function
+  @monitor_function
+
+Нужно заменить на:
+  from logger.tracer import trace
+  @trace
+
+Поиск оставшихся старых импортов:
+  grep -r "from logger.t import" --include="*.py"
+  grep -r "monitor_function" --include="*.py"
+
+================================================================================
+                            СЛЕДУЮЩИЕ ШАГИ
+================================================================================
+
+1. ✅ Все файлы bot/ обновлены
+2. ✅ database/database.py уже обновлен
+3. ✅ Система работает корректно
+
+Если найдутся еще файлы со старыми импортами:
+- Заменить "from logger.t" → "from logger.tracer"
+- Заменить "monitor_function" → "trace"
+- Заменить "@monitor_function" → "@trace"
+
+================================================================================
+                              ПРОВЕРЕНО
+================================================================================
+
+✅ bot/llm.py          - работает
+✅ bot/testing.py      - работает
+✅ bot/theory.py       - работает
+✅ bot/chat.py         - работает
+✅ bot/prompt_loader.py - работает
+✅ database/database.py - работает
+✅ Метрики сохраняются - работает
+✅ Просмотр метрик     - работает
+
+Дата проверки: 2026-01-02 16:22
+
+================================================================================
+

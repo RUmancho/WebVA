@@ -1,6 +1,6 @@
 """
 Модуль управления теоретическими материалами.
-Использует LLM (deepseek-r1:7b) для генерации объяснений.
+Использует LLM для генерации объяснений.
 """
 
 import os
@@ -19,21 +19,15 @@ from bot import chat
 from bot import topics
 from logger import console
 
+from logger.tracer import trace
+
 PYTHON_FILENAME = "theory"
 
 # Контексты для предметов
 SUBJECT_CONTEXTS = {
     "Алгебра": {"style": "математический", "focus": "формулы и уравнения", "examples": "числовые примеры"},
     "Геометрия": {"style": "геометрический", "focus": "теоремы и свойства фигур", "examples": "задачи с чертежами"},
-    "Физика": {"style": "научный", "focus": "законы физики", "examples": "примеры из жизни"},
-    "Химия": {"style": "химический", "focus": "реакции и свойства веществ", "examples": "лабораторные примеры"},
-    "Биология": {"style": "биологический", "focus": "живые организмы", "examples": "примеры из природы"},
-    "География": {"style": "географический", "focus": "страны и климат", "examples": "реальные объекты"},
-    "История": {"style": "исторический", "focus": "события и даты", "examples": "исторические факты"},
-    "Обществознание": {"style": "социальный", "focus": "общество и политика", "examples": "современные явления"},
-    "Русский язык": {"style": "лингвистический", "focus": "правила языка", "examples": "примеры из литературы"},
-    "Английский язык": {"style": "языковой", "focus": "грамматика и лексика", "examples": "диалоги и тексты"},
-    "Информатика": {"style": "технический", "focus": "алгоритмы и программирование", "examples": "примеры кода"}
+    "Физика": {"style": "научный", "focus": "законы физики", "examples": "примеры из жизни"}
 }
 
 
@@ -42,12 +36,12 @@ class TheoryManager:
     
     CURSOR_VARIANTS = ["▌", "▋", "▊", "▉", "█", "▐", "▎", "▍"]
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def __init__(self):
         self.SUBJECTS_STRUCTURE = topics.SUBJECTS_STRUCTURE
         self._init_session()
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _init_session(self):
         """Инициализация сессии"""
         try:
@@ -60,12 +54,12 @@ class TheoryManager:
         except Exception:
             pass
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def init_theory_session(self):
         """Публичный метод инициализации сессии"""
         self._init_session()
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _clean_text(self, text: str) -> str:
         """Очистка текста от курсоров и тегов размышлений"""
         if not text:
@@ -81,7 +75,7 @@ class TheoryManager:
         
         return cleaned.strip()
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def show_theory_interface(self) -> Dict[str, Any]:
         """Главный интерфейс"""
         self._init_session()
@@ -95,12 +89,12 @@ class TheoryManager:
             'subjects': self.SUBJECTS_STRUCTURE
         }
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def show_subjects(self) -> Dict[str, Any]:
         """Список предметов"""
         return {'subjects': list(self.SUBJECTS_STRUCTURE.keys()), 'subjects_structure': self.SUBJECTS_STRUCTURE}
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def show_sections(self) -> Dict[str, Any]:
         """Разделы предмета"""
         state = flask_session.get('theory_state', {})
@@ -111,7 +105,7 @@ class TheoryManager:
         
         return {'subject': subject, 'sections': self.SUBJECTS_STRUCTURE.get(subject, {}).get('sections', {})}
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def show_topics(self) -> Dict[str, Any]:
         """Темы раздела"""
         state = flask_session.get('theory_state', {})
@@ -124,57 +118,103 @@ class TheoryManager:
         topics_list = self.SUBJECTS_STRUCTURE.get(subject, {}).get('sections', {}).get(section, {}).get('topics', [])
         return {'subject': subject, 'section': section, 'topics': topics_list}
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def get_topic_explanation(self, subject: str, section: str, topic: str, regenerate: bool = False) -> str:
-        """Получение объяснения темы через LLM (deepseek-r1:7b)"""
+        """Получение объяснения темы через LLM"""
         
         # Проверяем кэш
         if not regenerate:
             cached = self._get_cached(topic)
             if cached:
+                print(f"[INFO] Объяснение загружено из кэша: {topic}")
                 return cached
         
         # Генерируем через LLM
         try:
+            print(f"[INFO] Генерация объяснения через LLM: {subject}/{section}/{topic}")
             explanation = self._generate_explanation(subject, section, topic)
             if explanation and len(explanation.strip()) > 50:
+                print(f"[SUCCESS] Объяснение сгенерировано (длина: {len(explanation)})")
                 return explanation
-        except Exception:
-            pass
+            else:
+                print(f"[WARN] Объяснение слишком короткое: {len(explanation) if explanation else 0} символов")
+        except Exception as e:
+            print(f"[ERROR] Ошибка генерации через LLM: {e}")
+            import traceback
+            traceback.print_exc()
         
         # Локальные объяснения как fallback
+        print(f"[INFO] Попытка использовать локальное объяснение")
         local_explanation = self._get_local_explanation(subject, section, topic)
         if local_explanation:
+            print(f"[SUCCESS] Использовано локальное объяснение")
             return local_explanation
         
         # Сообщение об ошибке
+        print(f"[ERROR] Не удалось получить объяснение для темы: {topic}")
         return self._get_error_message(subject, section, topic)
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _generate_explanation(self, subject: str, section: str, topic: str) -> str:
         """Генерация объяснения через LLM из chat.py"""
         
+        # Проверяем доступность LLM
+        if not chat.academic.is_available():
+            raise RuntimeError("LLM клиент не инициализирован. Проверьте, что Ollama запущен: ollama serve")
+        
         ctx = SUBJECT_CONTEXTS.get(subject, {"style": "образовательный", "focus": "ключевые понятия", "examples": "примеры"})
+        
+        print(f"[INFO] Создание промпта для темы: {topic}")
+        print(f"[INFO] Контекст: стиль={ctx['style']}, фокус={ctx['focus']}")
         
         # Создаём промпт
         prompt = Prompt(
-            role=f"Ты опытный учитель {subject.lower()}а. Объясняй просто и понятно, используй Markdown форматирование. НЕ используй LaTeX ($$ или $)!",
-            task=f"Объясни тему '{topic}' из раздела '{section}' по предмету {subject}. Стиль: {ctx['style']}. Фокус: {ctx['focus']}. Примеры: {ctx['examples']}.",
-            answer="Дай подробное объяснение на русском языке (400-600 слов) с примерами и практическим применением. Структура: введение, основные понятия, объяснение, применение, выводы."
+            role=f"Ты опытный учитель по предмету {subject}. Объясняй просто и понятно, используй Markdown форматирование. НЕ используй LaTeX ($$ или $)!",
+            task=f"""Объясни тему "{topic}" из раздела "{section}" по предмету {subject}.
+
+Требования:
+- Стиль изложения: {ctx['style']}
+- Акцент на: {ctx['focus']}
+- Примеры: {ctx['examples']}
+- Объём: 400-600 слов
+- Язык: русский
+- Формат: Markdown (без LaTeX)
+
+Структура объяснения:
+1. Введение (что это такое)
+2. Основные понятия и определения
+3. Подробное объяснение с примерами
+4. Практическое применение
+5. Выводы и рекомендации""",
+            answer="Дай подробное и понятное объяснение темы на русском языке."
         )
         
+        print(f"[INFO] Отправка запроса к LLM...")
+        
         # Используем готовый LLM из chat.py
-        response = chat.academic.ask(prompt)
+        try:
+            response = chat.academic.ask(prompt)
+        except Exception as e:
+            raise RuntimeError(f"Ошибка при обращении к LLM: {e}")
         
-        if not response or len(response.strip()) < 50:
-            raise ValueError(f"Пустой ответ от LLM (длина: {len(response) if response else 0})")
+        print(f"[INFO] Получен ответ от LLM (длина: {len(response) if response else 0})")
         
+        if not response:
+            raise ValueError("LLM вернул пустой ответ")
+        
+        if len(response.strip()) < 50:
+            raise ValueError(f"Ответ от LLM слишком короткий (длина: {len(response.strip())})")
+        
+        print(f"[INFO] Очистка ответа от служебных тегов...")
         response = self._clean_text(response)
+        
+        print(f"[INFO] Сохранение в кэш...")
         self._cache_explanation(topic, response)
         
+        print(f"[SUCCESS] Объяснение успешно сгенерировано и сохранено")
         return response
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _get_cached(self, topic: str) -> Optional[str]:
         """Получение из кэша"""
         try:
@@ -184,12 +224,14 @@ class TheoryManager:
             
             if cache_file.exists():
                 with open(cache_file, 'r', encoding='utf-8') as f:
-                    return self._clean_text(f.read())
+                    content = f.read()
+                    return self._clean_text(content)
             return None
-        except Exception:
+        except Exception as e:
+            print(f"[ERROR] Ошибка чтения кэша для темы '{topic}': {e}")
             return None
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _cache_explanation(self, topic: str, content: str):
         """Сохранение в кэш"""
         try:
@@ -197,12 +239,16 @@ class TheoryManager:
             cache_dir.mkdir(exist_ok=True)
             
             filename = self._topic_to_filename(topic)
-            with open(cache_dir / f"{filename}.txt", 'w', encoding='utf-8') as f:
+            cache_file = cache_dir / f"{filename}.txt"
+            
+            with open(cache_file, 'w', encoding='utf-8') as f:
                 f.write(content)
-        except Exception:
-            pass
+            
+            print(f"[INFO] Объяснение сохранено в кэш: {cache_file}")
+        except Exception as e:
+            print(f"[ERROR] Ошибка сохранения в кэш для темы '{topic}': {e}")
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _topic_to_filename(self, topic: str) -> str:
         """Транслитерация темы в имя файла"""
         translit = {
@@ -215,7 +261,7 @@ class TheoryManager:
         return ''.join(translit.get(c, c) if c.isalpha() else '_' if c == ' ' else '' 
                       for c in topic.lower() if c.isalnum() or c in ' _')
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _get_local_explanation(self, subject: str, section: str, topic: str) -> Optional[str]:
         """Локальные объяснения для популярных тем (fallback)"""
         local_explanations = {
@@ -254,7 +300,7 @@ class TheoryManager:
         
         return None
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _get_error_message(self, subject: str, section: str, topic: str) -> str:
         """Сообщение об ошибке"""
         return f"""## {topic}
@@ -267,7 +313,7 @@ class TheoryManager:
 
 ### 🔧 Возможные причины:
 1. Проблема с подключением к LLM
-2. Модель deepseek-r1:7b не отвечает
+2. LLM не отвечает
 
 Попробуйте перезагрузить страницу или выбрать другую тему."""
 

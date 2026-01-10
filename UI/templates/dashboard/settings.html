@@ -1,1 +1,68 @@
-<div class="card"><div class="card-header"><h5 class="mb-0">⚙️ Настройки</h5></div><div class="card-body"><div class="row"><div class="col-md-6"><h6>🎨 Оформление</h6><div class="mb-3"><label class="form-label">Тема оформления</label><div class="btn-group w-100" role="group"><input type="radio" class="btn-check" name="themeOption" id="themeLight" value="light" autocomplete="off"><label class="btn btn-outline-primary" for="themeLight">☀️ Светлая</label><input type="radio" class="btn-check" name="themeOption" id="themeDark" value="dark" autocomplete="off"><label class="btn btn-outline-primary" for="themeDark">🌙 Тёмная</label></div></div><div class="mb-3"><label class="form-label">Размер шрифта</label><select class="form-select" id="fontSizeSelect"><option value="small">Маленький</option><option value="medium">Средний</option><option value="large">Большой</option></select></div></div><div class="col-md-6"><h6>🔔 Уведомления</h6><div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="notificationsEnabled" checked><label class="form-check-label" for="notificationsEnabled"> Уведомления в приложении </label></div><div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="soundEnabled" checked><label class="form-check-label" for="soundEnabled"> Звуковые эффекты </label></div></div></div><hr><div class="d-flex justify-content-between"><button type="button" class="btn btn-outline-secondary" onclick="resetSettings()"> 🔄 Сбросить настройки </button><button type="button" class="btn btn-primary" onclick="saveSettings()"> 💾 Сохранить </button></div></div></div>
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">⚙️ Настройки</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <!-- Оформление -->
+            <div class="col-md-6">
+                <h6>🎨 Оформление</h6>
+                
+                <div class="mb-3">
+                    <label class="form-label">Тема оформления</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="themeOption" 
+                               id="themeLight" value="light" autocomplete="off">
+                        <label class="btn btn-outline-primary" for="themeLight">☀️ Светлая</label>
+                        
+                        <input type="radio" class="btn-check" name="themeOption" 
+                               id="themeDark" value="dark" autocomplete="off">
+                        <label class="btn btn-outline-primary" for="themeDark">🌙 Тёмная</label>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Размер шрифта</label>
+                    <select class="form-select" id="fontSizeSelect">
+                        <option value="small">Маленький</option>
+                        <option value="medium">Средний</option>
+                        <option value="large">Большой</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Уведомления -->
+            <div class="col-md-6">
+                <h6>🔔 Уведомления</h6>
+                
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" 
+                           id="notificationsEnabled" checked>
+                    <label class="form-check-label" for="notificationsEnabled">
+                        Уведомления в приложении
+                    </label>
+                </div>
+                
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" 
+                           id="soundEnabled" checked>
+                    <label class="form-check-label" for="soundEnabled">
+                        Звуковые эффекты
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <hr>
+        
+        <!-- Кнопки действий -->
+        <div class="d-flex justify-content-between">
+            <button type="button" class="btn btn-outline-secondary" onclick="resetSettings()">
+                🔄 Сбросить настройки
+            </button>
+            <button type="button" class="btn btn-primary" onclick="saveSettings()">
+                ✅ Сохранить
+            </button>
+        </div>
+    </div>
+</div>

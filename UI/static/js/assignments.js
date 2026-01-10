@@ -69,7 +69,7 @@ function renderAssignments(data) {
                     <td>${statusBadge}</td>
                     <td>
                         <button class="btn btn-sm btn-outline-primary" onclick="showAssignmentStats(${a.id})">📊</button>
-                        <button class="btn btn-sm btn-outline-warning" onclick="toggleAssignment(${a.id})">${a.is_active ? '⏸️' : '▶️'}</button>
+                        <button class="btn btn-sm btn-outline-warning" onclick="toggleAssignment(${a.id})">${a.is_active ? 'Пауза' : 'Запуск'}</button>
                     </td>
                 </tr>
             `;
@@ -103,7 +103,7 @@ function renderAssignments(data) {
             
             const statusHtml = a.is_submitted
                 ? `<div class="alert alert-success mb-0"><strong>✅ Выполнено!</strong><br>Результат: ${a.submission.percentage}%</div>`
-                : `<button class="btn btn-primary w-100" onclick="startTest(${a.id})">📝 Выполнить</button>`;
+                : `<button class="btn btn-primary w-100" onclick="startTest(${a.id})">Выполнить</button>`;
             
             html += `
                 <div class="col-md-6 mb-3">

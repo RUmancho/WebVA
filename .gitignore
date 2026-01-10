@@ -1,1 +1,214 @@
+# ============================================
+# Python
+# ============================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+*.dll
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Environments
+.env
+.venv
+env/
 venv/
+ENV/
+env.bak/
+venv.bak/
+
+
+# ============================================
+# Проект WebVA - Секретные данные
+# ============================================
+
+# Секретная папка
+secret/
+
+# Базы данных (содержат пароли пользователей!)
+*.db
+*.sqlite
+*.sqlite3
+database/*.db
+logger/reports/*.db
+
+# Логи
+*.log
+logs/
+*.log.*
+
+# Временные файлы
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+
+# ============================================
+# IDE и редакторы
+# ============================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# Cursor
+.cursor/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*.swn
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+
+# ============================================
+# OS файлы
+# ============================================
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+.Trash-*
+
+
+# ============================================
+# Конфигурационные файлы с секретами
+# ============================================
+
+# Переменные окружения
+.env
+.env.local
+.env.*.local
+*.env
+
+# Конфигурации
+config.local.py
+settings.local.py
+secrets.py
+credentials.json
+*.key
+*.pem
+*.cert
+
+
+# ============================================
+# Бэкапы и временные файлы
+# ============================================
+
+# Резервные копии
+*.bak
+*.backup
+*.old
+*.orig
+
+# Временные файлы редакторов
+*.autosave
+
+
+# ============================================
+# Node.js (если используется)
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# ============================================
+# WebVA специфичные исключения
+# ============================================
+
+# Пользовательские загрузки (если появятся)
+uploads/
+user_files/
+media/
+
+# Кеш системы
+cache/
+.cache/
+
+# Compiled C++ формулы (если нужно пересобирать)
+# Раскомментируйте, если хотите чтобы каждый пересобирал:
+# *.dll
+# Но для удобства оставляем DLL в репозитории
+
+# Временные файлы разработки
+TODO.md
+NOTES.md
+scratch/
+draft/

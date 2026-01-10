@@ -1,1 +1,198 @@
-<div class="card"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">📋 Задания</h5><div id="assignmentsActions"></div></div><div class="card-body"><div id="assignmentsContent"><div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div><p class="mt-2">Загрузка заданий...</p></div></div></div></div><div class="modal fade" id="createAssignmentModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">📝 Создать задание для класса</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="createAssignmentForm"><div class="row mb-3"><div class="col-md-6"><label class="form-label">Название задания *</label><input type="text" class="form-control" id="assignmentTitle" required></div><div class="col-md-6"><label class="form-label">Предмет *</label><select class="form-select" id="assignmentSubject" required><option value="">Выберите предмет</option><option value="Алгебра">Алгебра</option><option value="Геометрия">Геометрия</option><option value="Физика">Физика</option><option value="Химия">Химия</option><option value="Биология">Биология</option><option value="История">История</option><option value="География">География</option><option value="Русский язык">Русский язык</option><option value="Английский язык">Английский язык</option><option value="Информатика">Информатика</option><option value="Обществознание">Обществознание</option></select></div></div><div class="row mb-3"><div class="col-md-6"><label class="form-label">Тема</label><input type="text" class="form-control" id="assignmentTopic" placeholder="Например: Линейные уравнения"></div><div class="col-md-6"><label class="form-label">Уровень сложности</label><select class="form-select" id="assignmentDifficulty"><option value="Лёгкий">🟢 Лёгкий</option><option value="Средний" selected>🟡 Средний</option><option value="Хардкор">🔴 Хардкор</option></select></div></div><div class="mb-3"><label class="form-label">Описание задания</label><textarea class="form-control" id="assignmentDescription" rows="2" placeholder="Краткое описание задания"></textarea></div><hr><h6>👥 Назначить классу</h6><div class="row mb-3"><div class="col-md-4"><label class="form-label">Город</label><input type="text" class="form-control" id="targetCity" placeholder="Оставьте пустым для всех"></div><div class="col-md-4"><label class="form-label">Школа</label><input type="text" class="form-control" id="targetSchool" placeholder="Оставьте пустым для всех"></div><div class="col-md-4"><label class="form-label">Класс(ы)</label><input type="text" class="form-control" id="targetClass" placeholder="9А или 9А, 9Б"></div></div><div class="mb-3"><label class="form-label">Дедлайн</label><input type="datetime-local" class="form-control" id="assignmentDeadline"></div><hr><h6>📝 Генерация теста</h6><div class="mb-3"><div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="generationType" id="genLLM" value="llm" checked><label class="form-check-label" for="genLLM">🤖 Через LLM (DeepSeek)</label></div><div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="generationType" id="genMath" value="math"><label class="form-check-label" for="genMath">🔢 Математический генератор</label></div><div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="generationType" id="genManual" value="manual"><label class="form-check-label" for="genManual">✍️ Вручную</label></div></div><div id="questionCountSection" class="mb-3"><label class="form-label">Количество вопросов</label><input type="number" class="form-control" id="questionCount" value="5" min="1" max="20"></div><div id="manualQuestionsSection" class="mb-3" style="display: none;"><label class="form-label">Вопросы (JSON формат)</label><textarea class="form-control" id="manualQuestions" rows="5" placeholder='[{"question": "Вопрос?", "options": ["А", "Б", "В", "Г"], "correct_answer": "А"}]'></textarea></div><button type="button" class="btn btn-outline-primary mb-3" onclick="generateTestPreview()"> 👁️ Предпросмотр теста </button><div id="testPreview" class="mb-3" style="display: none;"><div class="card"><div class="card-header">Предпросмотр вопросов</div><div class="card-body" id="testPreviewContent"></div></div></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button><button type="button" class="btn btn-primary" onclick="createAssignment()"> ✅ Создать задание </button></div></div></div></div><div class="modal fade" id="assignmentStatsModal" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">📊 Статистика задания</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="assignmentStatsContent"><div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></div></div></div></div></div><div class="modal fade" id="takeTestModal" tabindex="-1" data-bs-backdrop="static"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="takeTestTitle">📝 Выполнение задания</h5><span class="badge bg-secondary ms-2" id="testTimer">00:00</span></div><div class="modal-body" id="takeTestContent"><div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></div></div><div class="modal-footer"><button type="button" class="btn btn-danger" onclick="cancelTest()">❌ Отменить</button><button type="button" class="btn btn-success" id="submitTestBtn" onclick="submitTest()" disabled> ✅ Отправить ответы </button></div></div></div></div>
+<!-- Карточка заданий -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">📋 Задания</h5>
+        <div id="assignmentsActions"></div>
+    </div>
+    <div class="card-body">
+        <div id="assignmentsContent">
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+                <p class="mt-2">Загрузка заданий...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно создания задания -->
+<div class="modal fade" id="createAssignmentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📝 Создать задание для класса</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createAssignmentForm">
+                    <!-- Основная информация -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Название задания *</label>
+                            <input type="text" class="form-control" id="assignmentTitle" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Предмет *</label>
+                            <select class="form-select" id="assignmentSubject" required>
+                                <option value="">Выберите предмет</option>
+                                <option value="Алгебра">Алгебра</option>
+                                <option value="Геометрия">Геометрия</option>
+                                <option value="Физика">Физика</option>
+                                <option value="Химия">Химия</option>
+                                <option value="Биология">Биология</option>
+                                <option value="История">История</option>
+                                <option value="География">География</option>
+                                <option value="Русский язык">Русский язык</option>
+                                <option value="Английский язык">Английский язык</option>
+                                <option value="Информатика">Информатика</option>
+                                <option value="Обществознание">Обществознание</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Тема</label>
+                            <input type="text" class="form-control" id="assignmentTopic" 
+                                   placeholder="Например: Линейные уравнения">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Уровень сложности</label>
+                            <select class="form-select" id="assignmentDifficulty">
+                                <option value="Лёгкий">🟢 Лёгкий</option>
+                                <option value="Средний" selected>🟡 Средний</option>
+                                <option value="Хардкор">🔴 Хардкор</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Описание задания</label>
+                        <textarea class="form-control" id="assignmentDescription" rows="2" 
+                                  placeholder="Краткое описание задания"></textarea>
+                    </div>
+                    
+                    <hr>
+                    
+                    <!-- Целевая аудитория -->
+                    <h6>👥 Назначить классу</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Город</label>
+                            <input type="text" class="form-control" id="targetCity" 
+                                   placeholder="Оставьте пустым для всех">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Школа</label>
+                            <input type="text" class="form-control" id="targetSchool" 
+                                   placeholder="Оставьте пустым для всех">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Класс(ы)</label>
+                            <input type="text" class="form-control" id="targetClass" 
+                                   placeholder="9А или 9А, 9Б">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Дедлайн</label>
+                        <input type="datetime-local" class="form-control" id="assignmentDeadline">
+                    </div>
+                    
+                    <hr>
+                    
+                    <!-- Генерация теста -->
+                    <h6>📝 Генерация теста</h6>
+                    <div class="mb-3">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="generationType" 
+                                   id="genLLM" value="llm" checked>
+                            <label class="form-check-label" for="genLLM">🤖 Через LLM (DeepSeek)</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="generationType" 
+                                   id="genMath" value="math">
+                            <label class="form-check-label" for="genMath">🔢 Математический генератор</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="generationType" 
+                                   id="genManual" value="manual">
+                            <label class="form-check-label" for="genManual">✍️ Вручную</label>
+                        </div>
+                    </div>
+                    
+                    <div id="questionCountSection" class="mb-3">
+                        <label class="form-label">Количество вопросов</label>
+                        <input type="number" class="form-control" id="questionCount" 
+                               value="5" min="1" max="20">
+                    </div>
+                    
+                    <div id="manualQuestionsSection" class="mb-3" style="display: none;">
+                        <label class="form-label">Вопросы (JSON формат)</label>
+                        <textarea class="form-control" id="manualQuestions" rows="5" 
+                                  placeholder='[{"question": "Вопрос?", "options": ["А", "Б", "В", "Г"], "correct_answer": "А"}]'></textarea>
+                    </div>
+                    
+                    <button type="button" class="btn btn-outline-primary mb-3" onclick="generateTestPreview()">
+                        👁️ Предпросмотр теста
+                    </button>
+                    
+                    <div id="testPreview" class="mb-3" style="display: none;">
+                        <div class="card">
+                            <div class="card-header">Предпросмотр вопросов</div>
+                            <div class="card-body" id="testPreviewContent"></div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="createAssignment()">
+                    ✅ Создать задание
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно статистики задания -->
+<div class="modal fade" id="assignmentStatsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📊 Статистика задания</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="assignmentStatsContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно выполнения теста -->
+<div class="modal fade" id="takeTestModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="takeTestTitle">📝 Выполнение задания</h5>
+                <span class="badge bg-secondary ms-2" id="testTimer">00:00</span>
+            </div>
+            <div class="modal-body" id="takeTestContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" onclick="cancelTest()">❌ Отменить</button>
+                <button type="button" class="btn btn-success" id="submitTestBtn" 
+                        onclick="submitTest()" disabled>
+                    ✅ Отправить ответы
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

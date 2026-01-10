@@ -1,44 +1,120 @@
 """
 Модуль чата с LLM.
 Использует LLM сервис и реестр промптов.
+Поддерживает Ollama и OpenAI (gpt-4o-mini).
 """
 
 import os
 import sys
+from pathlib import Path
+from dotenv import load_dotenv
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-import langchain_ollama
+# Загрузка .env файла из корня проекта
+load_dotenv(Path(project_root) / '.env')
+
 from bot.llm import AcademicLLM
 from bot.prompt_registry import Math
 from logger import console
+
+from logger.tracer import trace
 
 PYTHON_FILENAME = "chat"
 
 # ========================== НАСТРОЙКИ ==========================
 
-MODEL_NAME = "deepseek-r1:7b"
+# Выбор провайдера LLM (можно переключать через .env)
+# Варианты: "ollama", "openai"
+LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'openai').lower()
+
+# Настройки Ollama
+OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'deepseek-r1:7b')
+OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'localhost')
+OLLAMA_PORT = int(os.getenv('OLLAMA_PORT', '11434'))
+
+# Настройки OpenAI
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+
+# Общие настройки
 NUM_THREADS = 1
-TEMPERATURE = 0.0
-OLLAMA_HOST = "localhost"
-OLLAMA_PORT = 11434
+TEMPERATURE = float(os.getenv('LLM_TEMPERATURE', '0.0'))
 
 
 # ========================== ИНИЦИАЛИЗАЦИЯ LLM ==========================
 
-academic = AcademicLLM(
-    langchain_ollama.OllamaLLM,
-    MODEL_NAME,
-    num_thread=NUM_THREADS,
-    temperature=TEMPERATURE
-)
+def init_llm():
+    """Инициализация LLM в зависимости от выбранного провайдера"""
+    
+    if LLM_PROVIDER == 'openai':
+        # Инициализация OpenAI
+        if not OPENAI_API_KEY:
+            print("[ERROR] OPENAI_API_KEY не установлен! Укажите в .env файле")
+            print("[INFO] Переключаюсь на Ollama...")
+            return init_ollama()
+        
+        try:
+            from langchain_openai import ChatOpenAI
+            
+            print(f"[INFO] Инициализация OpenAI: {OPENAI_MODEL}")
+            return AcademicLLM(
+                ChatOpenAI,
+                OPENAI_MODEL,
+                api_key=OPENAI_API_KEY,
+                temperature=TEMPERATURE,
+                max_tokens=2000
+            )
+        except ImportError:
+            print("[ERROR] langchain-openai не установлен!")
+            print("[INFO] Установите: pip install langchain-openai")
+            print("[INFO] Переключаюсь на Ollama...")
+            return init_ollama()
+        except Exception as e:
+            print(f"[ERROR] Ошибка инициализации OpenAI: {e}")
+            print("[INFO] Переключаюсь на Ollama...")
+            return init_ollama()
+    
+    else:
+        # Инициализация Ollama (по умолчанию)
+        return init_ollama()
+
+
+def init_ollama():
+    """Инициализация Ollama LLM"""
+    try:
+        import langchain_ollama
+        
+        print(f"[INFO] Инициализация Ollama: {OLLAMA_MODEL}")
+        return AcademicLLM(
+            langchain_ollama.OllamaLLM,
+            OLLAMA_MODEL,
+            num_thread=NUM_THREADS,
+            temperature=TEMPERATURE
+        )
+    except ImportError:
+        print("[ERROR] langchain-ollama не установлен!")
+        print("[INFO] Установите: pip install langchain-ollama")
+        return None
+    except Exception as e:
+        print(f"[ERROR] Ошибка инициализации Ollama: {e}")
+        return None
+
+
+# Инициализируем LLM
+academic = init_llm()
+
+if academic and academic.is_available():
+    print(f"[SUCCESS] LLM инициализирован: {LLM_PROVIDER.upper()}")
+else:
+    print("[ERROR] LLM не инициализирован!")
 
 
 # ========================== API ФУНКЦИИ ==========================
 
-@console.debug(PYTHON_FILENAME)
+@trace
 def explain_theory(topic: str) -> str:
     """
     Объяснить теорию по выбранной теме.
@@ -80,7 +156,7 @@ def explain_theory(topic: str) -> str:
         return ""
 
 
-@console.debug(PYTHON_FILENAME)
+@trace
 def generate_tasks(topic: str, difficulty: str, n: int) -> str:
     """
     Сгенерировать задания по теме.

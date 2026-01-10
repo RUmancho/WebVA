@@ -2,14 +2,14 @@ import sys
 from pathlib import Path
 from flask import *
 import os
+from dotenv import load_dotenv
 
-from sqlalchemy.sql.expression import False_
-
-# Получаем абсолютный путь к файлу и его родительскую директорию
 current_file = Path(__file__).resolve()
 project_root = current_file.parent.parent
 
-# Добавляем корневую директорию проекта в sys.path
+# Загрузка .env файла из корня проекта
+load_dotenv(project_root / '.env')
+
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
@@ -17,14 +17,12 @@ from database.auth import auth_manager
 from database.database import db
 from bot.theory import theory_manager
 from bot.testing import testing_manager
-from logger.stats import log_info, log_error
 
 PYTHON_FILENAME = "app"
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Конфигурация
 PAGE_TITLE = "Система регистрации учителей и учеников"
 PAGE_ICON = "🎓"
 
@@ -320,7 +318,7 @@ def api_theory_topics():
 
 @app.route('/api/theory/explanation', methods=['POST'])
 def api_theory_explanation():
-    """Генерация объяснения темы через LLM (deepseek-r1:7b)"""
+    """Генерация объяснения темы через LLM"""
     if not auth_manager.is_logged_in():
         return jsonify({'error': 'Не авторизован'}), 401
     
@@ -524,7 +522,6 @@ def api_testing_generate_test():
         
         return jsonify({'test': test})
     except Exception as e:
-        log_error(f"Ошибка генерации теста: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
 
@@ -557,7 +554,6 @@ def api_testing_submit_answer():
         
         return jsonify({'success': True})
     except Exception as e:
-        log_error(f"Ошибка сохранения ответа: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
 
@@ -586,11 +582,8 @@ def api_testing_submit_all_answers():
         
         session.modified = True
         
-        log_info(f"Сохранено {len(answers)} ответов: {session['testing_state']['user_answers']}", PYTHON_FILENAME)
-        
         return jsonify({'success': True, 'saved_count': len(answers)})
     except Exception as e:
-        log_error(f"Ошибка сохранения всех ответов: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
 
 
@@ -608,8 +601,410 @@ def api_testing_finish_test():
         
         return jsonify({'results': results})
     except Exception as e:
-        log_error(f"Ошибка подсчёта результатов: {e}", PYTHON_FILENAME)
         return jsonify({'error': str(e)}), 500
+
+# ========================== API: ЧАТ ==========================
+
+@app.route('/api/chat/history')
+def api_chat_history():
+    """Получение истории чата"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        from bot.AI import chatbot
+        messages = chatbot.get_chat_history()
+        return jsonify({'messages': messages})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/chat/send', methods=['POST'])
+def api_chat_send():
+    """Отправка сообщения в чат"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        message = data.get('message', '').strip()
+        
+        if not message:
+            return jsonify({'error': 'Сообщение не может быть пустым'}), 400
+        
+        from bot.AI import chatbot
+        import datetime
+        
+        # Добавляем сообщение пользователя
+        chatbot.add_message('user', message)
+        
+        # Получаем ответ бота
+        response = chatbot.get_bot_response(message)
+        
+        # Добавляем ответ бота
+        chatbot.add_message('assistant', response)
+        
+        timestamp = datetime.datetime.now().strftime('%H:%M')
+        
+        return jsonify({
+            'success': True,
+            'user_message': {
+                'role': 'user',
+                'content': message,
+                'timestamp': timestamp
+            },
+            'bot_message': {
+                'role': 'assistant',
+                'content': response,
+                'timestamp': timestamp
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/chat/clear', methods=['POST'])
+def api_chat_clear():
+    """Очистка истории чата"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        from bot.AI import chatbot
+        chatbot.clear_chat_history()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ========================== API: ЗАЯВКИ ==========================
+
+@app.route('/api/dashboard/requests')
+def api_dashboard_requests():
+    """Получение заявок"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if not user:
+            return jsonify({'error': 'Пользователь не найден'}), 404
+        
+        if user['role'] == 'Ученик':
+            # Для ученика - входящие заявки
+            requests_list = db.get_pending_requests_for_student(user['id'])
+            return jsonify({
+                'requests': requests_list or []
+            })
+        elif user['role'] == 'Учитель':
+            # Для учителя - список учеников
+            students = db.get_all_students()
+            sent_requests = db.get_requests_by_teacher(user['id'])
+            return jsonify({
+                'all_students': students or [],
+                'sent_requests': sent_requests or []
+            })
+        else:
+            return jsonify({'error': 'Неизвестная роль пользователя'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/dashboard/teachers')
+def api_dashboard_teachers():
+    """Получение списка учителей"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if not user:
+            return jsonify({'error': 'Пользователь не найден'}), 404
+        
+        response_data = {}
+        
+        # Получаем список всех учителей
+        all_teachers = db.get_teachers()
+        
+        # Фильтр по предмету (если указан)
+        subject_filter = request.args.get('subject')
+        if subject_filter and subject_filter != 'Все предметы':
+            all_teachers = [t for t in all_teachers if t.get('subjects') and subject_filter in t.get('subjects', '')]
+        
+        response_data['teachers'] = all_teachers or []
+        
+        # Получаем список всех предметов для фильтра
+        subjects_set = set()
+        for teacher in db.get_teachers():
+            if teacher.get('subjects'):
+                # Предметы могут быть строкой с разделителями
+                subjects_list = [s.strip() for s in teacher['subjects'].split(',')]
+                subjects_set.update(subjects_list)
+        response_data['subjects'] = sorted(list(subjects_set))
+        
+        # Для ученика - показываем его учителей
+        if user['role'] == 'Ученик':
+            my_teachers = db.get_student_teachers(user['id'])
+            response_data['my_teachers'] = my_teachers or []
+        
+        # Для учителя - показываем его учеников в древовидной структуре
+        elif user['role'] == 'Учитель':
+            students_tree = db.get_teacher_students_tree(user['id'])
+            response_data['students_tree'] = students_tree or {}
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        print(f"[ERROR] Ошибка в api_dashboard_teachers: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/dashboard/auto-match', methods=['POST'])
+def api_dashboard_auto_match():
+    """Автоматическое прикрепление учеников к учителю"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if not user or user['role'] != 'Учитель':
+            return jsonify({'error': 'Только учителя могут выполнять эту операцию'}), 403
+        
+        from database.models import StudentTeacherRelation
+        from sqlalchemy.exc import IntegrityError
+        
+        # Получаем всех учеников из той же школы и города
+        all_students = db.get_all_students()
+        matched_count = 0
+        
+        for student in all_students:
+            # Проверяем совпадение города и школы
+            if (student.get('city') == user.get('city') and 
+                student.get('school') == user.get('school')):
+                # Проверяем, не связаны ли уже
+                existing_teachers = db.get_student_teachers(student['id'])
+                if not any(t['id'] == user['id'] for t in (existing_teachers or [])):
+                    # Создаем связь напрямую через базу данных
+                    try:
+                        session = db.get_session()
+                        new_relation = StudentTeacherRelation(
+                            student_id=student['id'],
+                            teacher_id=user['id']
+                        )
+                        session.add(new_relation)
+                        session.commit()
+                        matched_count += 1
+                    except IntegrityError:
+                        # Связь уже существует
+                        session.rollback()
+                    except Exception as e:
+                        print(f"[ERROR] Ошибка создания связи: {e}")
+                        session.rollback()
+                    finally:
+                        session.close()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Автоматически прикреплено учеников: {matched_count}'
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Ошибка в api_dashboard_auto_match: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/requests/send', methods=['POST'])
+def api_requests_send():
+    """Отправка заявки ученику"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if not user or user['role'] != 'Учитель':
+            return jsonify({'error': 'Только учителя могут отправлять заявки'}), 403
+        
+        data = request.get_json()
+        student_id = data.get('student_id')
+        message = data.get('message', '')
+        
+        if not student_id:
+            return jsonify({'error': 'ID ученика не указан'}), 400
+        
+        success, result = db.create_teacher_request(
+            teacher_id=user['id'],
+            student_id=student_id,
+            message=message
+        )
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Заявка отправлена'})
+        else:
+            return jsonify({'error': result}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/requests/<int:request_id>/accept', methods=['POST'])
+def api_requests_accept(request_id):
+    """Принятие заявки"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if not user or user['role'] != 'Ученик':
+            return jsonify({'error': 'Только ученики могут принимать заявки'}), 403
+        
+        success, result = db.accept_teacher_request(request_id, user['id'])
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Заявка принята'})
+        else:
+            return jsonify({'error': result}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/requests/<int:request_id>/reject', methods=['POST'])
+def api_requests_reject(request_id):
+    """Отклонение заявки"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        user = auth_manager.get_current_user()
+        if not user or user['role'] != 'Ученик':
+            return jsonify({'error': 'Только ученики могут отклонять заявки'}), 403
+        
+        success, result = db.reject_teacher_request(request_id, user['id'])
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Заявка отклонена'})
+        else:
+            return jsonify({'error': result}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ========================== API: КАЛЬКУЛЯТОР ФОРМУЛ ==========================
+
+@app.route('/api/formulas/categories')
+def api_formulas_categories():
+    """Получение категорий формул"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        from formulas.formula_calculator import get_categories
+        categories = get_categories()
+        return jsonify({
+            'categories': categories,
+            'current_category': session.get('formulas_category')
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/formulas/select-category', methods=['POST'])
+def api_formulas_select_category():
+    """Выбор категории формул"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        category = data.get('category')
+        
+        if not category:
+            return jsonify({'error': 'Категория не указана'}), 400
+        
+        from formulas.formula_calculator import get_subcategories
+        subcategories = get_subcategories(category)
+        
+        session['formulas_category'] = category
+        session.modified = True
+        
+        return jsonify({
+            'category': category,
+            'subcategories': subcategories
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/formulas/select-subcategory', methods=['POST'])
+def api_formulas_select_subcategory():
+    """Выбор подкатегории и получение формул"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        subcategory = data.get('subcategory')
+        category = session.get('formulas_category')
+        
+        if not category or not subcategory:
+            return jsonify({'error': 'Категория или подкатегория не указана'}), 400
+        
+        from formulas.formula_calculator import get_formulas
+        formulas = get_formulas(category, subcategory)
+        
+        # Преобразуем формулы для JSON (убираем функции calculate)
+        formulas_json = []
+        for formula in formulas:
+            formulas_json.append({
+                'name': formula['name'],
+                'formula': formula['formula'],
+                'fields': formula['fields']
+            })
+        
+        session['formulas_subcategory'] = subcategory
+        session.modified = True
+        
+        return jsonify({
+            'category': category,
+            'subcategory': subcategory,
+            'formulas': formulas_json
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/formulas/calculate', methods=['POST'])
+def api_formulas_calculate():
+    """Вычисление формулы"""
+    if not auth_manager.is_logged_in():
+        return jsonify({'error': 'Не авторизован'}), 401
+    
+    try:
+        data = request.get_json()
+        formula_name = data.get('formula_name')
+        category = data.get('category')
+        subcategory = data.get('subcategory')
+        values = data.get('values', {})
+        target = data.get('target')
+        
+        if not all([formula_name, category, subcategory, target]):
+            return jsonify({'error': 'Не все параметры указаны'}), 400
+        
+        from formulas.formula_calculator import calculate
+        result = calculate(formula_name, category, subcategory, values, target)
+        
+        return jsonify({
+            'success': True,
+            'result': result,
+            'target': target
+        })
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Ошибка вычисления: {str(e)}'}), 500
+
 
 import logging
 

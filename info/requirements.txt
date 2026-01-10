@@ -1,0 +1,12 @@
+flask
+sqlalchemy
+openai
+opentelemetry-api
+opentelemetry-sdk
+psutil
+langchain-ollama
+markdown
+cffi
+
+
+Позволяет работать с таблицами базы данных как с обычными классами Python.

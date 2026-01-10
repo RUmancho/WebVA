@@ -20,15 +20,15 @@
 </style>
 
 <div class="dashboard-header">
-    <div class="dashboard-title">🎓 Система обучения</div>
+    <div class="dashboard-title">Система обучения</div>
     <div class="header-actions">
         <button class="theme-toggle" onclick="ThemeManager.toggle()" title="Переключить тему">
             <i class="bi bi-sun-fill theme-icon-light"></i>
             <i class="bi bi-moon-fill theme-icon-dark"></i>
         </button>
-        <button class="profile-btn" onclick="toggleProfile()" title="Профиль">👤</button>
+        <button class="profile-btn" onclick="toggleProfile()" title="Профиль">P</button>
         <div class="profile-dropdown" id="profileDropdown">
-            <h4>👤 {{ user.first_name }} {{ user.last_name }}</h4>
+            <h4>{{ user.first_name }} {{ user.last_name }}</h4>
             <p><strong>Роль:</strong> {{ user.role }}</p>
             <p><strong>Email:</strong> {{ user.email }}</p>
             {% if user.role == 'Ученик' %}
@@ -41,25 +41,25 @@
                 <p><strong>Предметы:</strong> {{ user.subjects or 'Не указаны' }}</p>
             {% endif %}
             <hr>
-            <a href="{{ url_for('logout') }}" class="btn btn-danger" style="width:100%;">🚪 Выйти</a>
+            <a href="{{ url_for('logout') }}" class="btn btn-danger" style="width:100%;">Выйти</a>
         </div>
     </div>
 </div>
 
 <!-- Навигация -->
 <div class="nav-tabs-horizontal" id="mainTabs">
-    <button class="nav-link {% if active_tab == 'chat' or active_tab == 'home' %}active{% endif %}" onclick="showTab('chat')">💬 Чат-помощник</button>
-    <button class="nav-link {% if active_tab == 'theory' %}active{% endif %}" onclick="showTab('theory')">📚 Теория</button>
-    <button class="nav-link {% if active_tab == 'testing' %}active{% endif %}" onclick="showTab('testing')">📝 Тестирование</button>
-    <button class="nav-link {% if active_tab == 'formulas' %}active{% endif %}" onclick="showTab('formulas')">📐 Формулы</button>
-    <button class="nav-link {% if active_tab == 'teachers' %}active{% endif %}" onclick="showTab('teachers')">👨‍🏫 Учителя</button>
-    <button class="nav-link {% if active_tab == 'assignments' %}active{% endif %}" onclick="showTab('assignments')">📋 Задания</button>
-    <button class="nav-link {% if active_tab == 'notifications' %}active{% endif %}" onclick="showTab('notifications')">🔔 Уведомления</button>
-    <button class="nav-link {% if active_tab == 'personal_chat' %}active{% endif %}" onclick="showTab('personal_chat')">💭 Чат</button>
-    <button class="nav-link {% if active_tab == 'requests' %}active{% endif %}" onclick="showTab('requests')">📋 Заявки</button>
-    <button class="nav-link {% if active_tab == 'calls' %}active{% endif %}" onclick="showTab('calls')">📞 Звонки</button>
-    <button class="nav-link {% if active_tab == 'lessons' %}active{% endif %}" onclick="showTab('lessons')">🎥 Записи</button>
-    <button class="nav-link {% if active_tab == 'settings' %}active{% endif %}" onclick="showTab('settings')">⚙️ Настройки</button>
+    <button class="nav-link {% if active_tab == 'chat' or active_tab == 'home' %}active{% endif %}" onclick="showTab('chat')">Чат-помощник</button>
+    <button class="nav-link {% if active_tab == 'theory' %}active{% endif %}" onclick="showTab('theory')">Теория</button>
+    <button class="nav-link {% if active_tab == 'testing' %}active{% endif %}" onclick="showTab('testing')">Тестирование</button>
+    <button class="nav-link {% if active_tab == 'formulas' %}active{% endif %}" onclick="showTab('formulas')">Формулы</button>
+    <button class="nav-link {% if active_tab == 'teachers' %}active{% endif %}" onclick="showTab('teachers')">Учителя</button>
+    <button class="nav-link {% if active_tab == 'assignments' %}active{% endif %}" onclick="showTab('assignments')">Задания</button>
+    <button class="nav-link {% if active_tab == 'notifications' %}active{% endif %}" onclick="showTab('notifications')">Уведомления</button>
+    <button class="nav-link {% if active_tab == 'personal_chat' %}active{% endif %}" onclick="showTab('personal_chat')">Личный чат</button>
+    <button class="nav-link {% if active_tab == 'requests' %}active{% endif %}" onclick="showTab('requests')">Заявки</button>
+    <button class="nav-link {% if active_tab == 'calls' %}active{% endif %}" onclick="showTab('calls')">Звонки</button>
+    <button class="nav-link {% if active_tab == 'lessons' %}active{% endif %}" onclick="showTab('lessons')">Записи уроков</button>
+    <button class="nav-link {% if active_tab == 'settings' %}active{% endif %}" onclick="showTab('settings')">Настройки</button>
 </div>
 
 <!-- Контент -->

@@ -14,6 +14,9 @@ if project_root not in sys.path:
 from bot.prompt import Prompt
 from logger import console
 
+from logger.tracer import trace
+
+
 PYTHON_FILENAME = "llm"
 
 
@@ -44,7 +47,7 @@ class LLM:
             print(f"[ERROR] Ошибка инициализации LLM ({model}): {e}")
             self.client = None
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def ask(self, prompt: Prompt) -> str:
         """
         Отправить промпт и получить ответ.
@@ -61,13 +64,31 @@ class LLM:
         
         try:
             prompt_text = prompt.build()
-            response = self.client.invoke(prompt_text)
-            return str(response) if response else ""
+            
+            # Проверяем тип клиента для правильного вызова
+            client_type = type(self.client).__name__
+            
+            if 'ChatOpenAI' in client_type or 'OpenAI' in client_type:
+                # Для OpenAI используем messages формат
+                from langchain_core.messages import HumanMessage
+                response = self.client.invoke([HumanMessage(content=prompt_text)])
+                # Извлекаем текст из ответа
+                if hasattr(response, 'content'):
+                    return str(response.content) if response.content else ""
+                else:
+                    return str(response) if response else ""
+            else:
+                # Для Ollama и других - обычный invoke
+                response = self.client.invoke(prompt_text)
+                return str(response) if response else ""
+                
         except Exception as e:
             print(f"[ERROR] Ошибка при запросе к LLM: {e}")
+            import traceback
+            traceback.print_exc()
             return ""
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def ask_raw(self, prompt_text: str) -> str:
         """
         Отправить текстовый промпт напрямую.
@@ -83,13 +104,28 @@ class LLM:
             return ""
         
         try:
-            response = self.client.invoke(prompt_text)
-            return str(response) if response else ""
+            client_type = type(self.client).__name__
+            
+            if 'ChatOpenAI' in client_type or 'OpenAI' in client_type:
+                # Для OpenAI используем messages формат
+                from langchain_core.messages import HumanMessage
+                response = self.client.invoke([HumanMessage(content=prompt_text)])
+                if hasattr(response, 'content'):
+                    return str(response.content) if response.content else ""
+                else:
+                    return str(response) if response else ""
+            else:
+                # Для Ollama и других
+                response = self.client.invoke(prompt_text)
+                return str(response) if response else ""
+                
         except Exception as e:
             print(f"[ERROR] Ошибка при запросе к LLM: {e}")
+            import traceback
+            traceback.print_exc()
             return ""
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def ask_with_params(self, prompt: Prompt, **params) -> str:
         """
         Отправить промпт с подстановкой параметров.
@@ -118,7 +154,7 @@ class AcademicLLM(LLM):
     def __init__(self, provider, model: str, **kwargs):
         super().__init__(provider, model, **kwargs)
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def explain(self, prompt: Prompt) -> str:
         """
         Получить объяснение темы.
@@ -132,7 +168,7 @@ class AcademicLLM(LLM):
         response = self.ask(prompt)
         return self._clean_response(response)
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def generate_tasks(self, prompt: Prompt, count: int = 5) -> str:
         """
         Сгенерировать задания.

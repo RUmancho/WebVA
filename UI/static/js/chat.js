@@ -1,6 +1,43 @@
 // Чат с помощником
 let chatMessages = [];
 
+// Простой форматтер Markdown
+function formatMarkdown(text) {
+    if (!text) return '';
+    
+    // Экранирование HTML
+    let formatted = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    
+    // Заголовки
+    formatted = formatted.replace(/^### (.*$)/gm, '<h5>$1</h5>');
+    formatted = formatted.replace(/^## (.*$)/gm, '<h4>$1</h4>');
+    formatted = formatted.replace(/^# (.*$)/gm, '<h3>$1</h3>');
+    
+    // Жирный текст
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Курсив
+    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Код (inline)
+    formatted = formatted.replace(/`(.*?)`/g, '<code>$1</code>');
+    
+    // Списки
+    formatted = formatted.replace(/^\- (.*$)/gm, '<li>$1</li>');
+    formatted = formatted.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+    
+    // Ссылки
+    formatted = formatted.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    
+    // Переносы строк
+    formatted = formatted.replace(/\n/g, '<br>');
+    
+    return formatted;
+}
+
 function loadChatHistory() {
     fetch('/api/chat/history')
         .then(response => response.json())
@@ -39,7 +76,12 @@ function renderMessages() {
         cardBody.className = 'card-body p-2';
         
         const content = document.createElement('div');
-        content.textContent = msg.content;
+        // Для ассистента применяем базовый рендеринг Markdown
+        if (msg.role === 'assistant') {
+            content.innerHTML = formatMarkdown(msg.content);
+        } else {
+            content.textContent = msg.content;
+        }
         content.style.whiteSpace = 'pre-wrap';
         
         const timestamp = document.createElement('small');
@@ -85,13 +127,15 @@ function sendMessage(event) {
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
+        if (data.success && data.bot_message) {
             chatMessages.push({
                 role: 'assistant',
-                content: data.response,
-                timestamp: new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})
+                content: data.bot_message.content,
+                timestamp: data.bot_message.timestamp || new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})
             });
             renderMessages();
+        } else if (data.error) {
+            alert('Ошибка: ' + data.error);
         } else {
             alert('Ошибка отправки сообщения');
         }

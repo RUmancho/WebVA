@@ -1,0 +1,219 @@
+================================================================================
+                        CHANGELOG: СИСТЕМА ТРАССИРОВКИ
+================================================================================
+
+ДАТА: 2026-01-02
+ВЕРСИЯ: 2.0 (полный рефакторинг)
+
+================================================================================
+                           ЧТО ИЗМЕНИЛОСЬ
+================================================================================
+
+1. ПЕРЕИМЕНОВАНИЯ:
+   - logger/t.py → logger/tracer.py
+   - @monitor_function → @trace
+   - flush_metrics() → flush()
+   - shutdown_metrics() → shutdown()
+
+2. НОВЫЕ НАЗВАНИЯ КОЛОНОК В БД (понятные и короткие):
+   
+   БЫЛО:                  СТАЛО:
+   function_name    →     module + function (разделены)
+   value            →     calls (количество вызовов)
+   count            →     calls (в контексте histogram)
+   sum              →     total_time (общее время)
+   min              →     min_time (минимальное время)
+   max              →     max_time (максимальное время)
+   metric_type      →     'call', 'error', 'time' (короче)
+
+3. НОВЫЕ ПОЛЯ:
+   + module          - имя модуля (откуда функция)
+   + function        - имя функции
+   + calls           - количество вызовов (всегда заполнено)
+   + avg_time        - среднее время (округлено до 4 знаков)
+   + total_time      - общее время (округлено до 4 знаков)
+   + min_time        - минимум (округлено до 4 знаков)
+   + max_time        - максимум (округлено до 4 знаков)
+   + errors          - количество ошибок (всегда заполнено)
+   + error_type      - тип ошибки (всегда заполнено, пустая строка если нет)
+
+4. УДАЛЕНЫ NULL ЗНАЧЕНИЯ:
+   - Все поля теперь имеют значения по умолчанию
+   - Нет nullable=True (кроме timestamp с default)
+   - Всегда заполнено: calls=0, errors=0, *_time=0.0, error_type=''
+
+5. ОКРУГЛЕНИЕ:
+   - Время округляется до 4 знаков после запятой
+   - В декораторе: round(time, 4)
+   - В БД: 0.1234 секунды
+
+6. ОПТИМИЗАЦИИ:
+   - Упрощен код tracer.py (с 118 до 81 строки)
+   - Упрощен код exporter.py (с 180 до 135 строк)
+   - Удален мертвый код
+   - Инлайнинг коротких функций
+   - Более короткие имена переменных
+
+7. КОД БОЛЕЕ ПОНЯТНЫЙ:
+   - Четкие имена: module, function, calls, avg_time
+   - Комментарии к каждому полю
+   - Группировка логики в методы
+   - Удалены избыточные проверки
+
+================================================================================
+                        СТРУКТУРА БАЗЫ ДАННЫХ
+================================================================================
+
+Таблица: function_metrics
+
+Столбцы:
+  id           INTEGER      PRIMARY KEY (автоинкремент)
+  module       VARCHAR(255) NOT NULL INDEX (имя модуля: database.database)
+  function     VARCHAR(255) NOT NULL INDEX (имя функции: register_user)
+  metric_type  VARCHAR(20)  NOT NULL ('call', 'error', 'time')
+  calls        INTEGER      NOT NULL DEFAULT 0 (количество вызовов)
+  avg_time     FLOAT        NOT NULL DEFAULT 0.0 (среднее время, сек)
+  total_time   FLOAT        NOT NULL DEFAULT 0.0 (общее время, сек)
+  min_time     FLOAT        NOT NULL DEFAULT 0.0 (минимум, сек)
+  max_time     FLOAT        NOT NULL DEFAULT 0.0 (максимум, сек)
+  errors       INTEGER      NOT NULL DEFAULT 0 (количество ошибок)
+  error_type   VARCHAR(100) NOT NULL DEFAULT '' (тип ошибки)
+  timestamp    DATETIME     NOT NULL INDEX (время экспорта)
+
+Индексы:
+  - PRIMARY KEY (id)
+  - INDEX (module)
+  - INDEX (function)
+  - INDEX (timestamp)
+
+Примеры записей:
+
+ID  Module           Function      Type  Calls  AvgTime  TotalTime  MinTime  MaxTime  Errors  ErrorType  Timestamp
+1   database.database register_user call  247    0.0000   0.0000     0.0000   0.0000   0       ''         2026-01-02 15:00:00
+2   database.database register_user time  247    0.0234   5.7698     0.0121   0.1567   0       ''         2026-01-02 15:00:00
+3   database.database register_user error 0      0.0000   0.0000     0.0000   0.0000   8       ValueError 2026-01-02 15:00:00
+
+================================================================================
+                          ИСПОЛЬЗОВАНИЕ
+================================================================================
+
+1. ДЕКОРАТОР:
+
+   from logger.tracer import trace
+   
+   @trace
+   def my_function():
+       pass
+
+2. ПРИНУДИТЕЛЬНЫЙ ЭКСПОРТ:
+
+   from logger.tracer import flush
+   
+   flush()  # Экспортировать метрики немедленно
+
+3. ЗАВЕРШЕНИЕ:
+
+   from logger.tracer import shutdown
+   
+   shutdown()  # Корректное завершение
+
+4. ПРОСМОТР МЕТРИК:
+
+   python view_metrics.py           # Все метрики
+   python show_database_metrics.py  # Метрики database.py
+   python analyze_metrics.py        # Анализ функций
+   python check_db.py               # Структура БД
+
+================================================================================
+                          ПРИМЕРЫ ЗАПРОСОВ
+================================================================================
+
+1. Получить общее количество вызовов функции:
+
+   SELECT MAX(calls) 
+   FROM function_metrics 
+   WHERE module = 'database.database' 
+     AND function = 'register_user'
+     AND metric_type = 'call';
+
+2. Получить среднее время выполнения:
+
+   SELECT AVG(avg_time) 
+   FROM function_metrics 
+   WHERE module = 'database.database' 
+     AND function = 'register_user'
+     AND metric_type = 'time';
+
+3. Получить количество ошибок по типам:
+
+   SELECT error_type, SUM(errors)
+   FROM function_metrics 
+   WHERE module = 'database.database' 
+     AND function = 'register_user'
+     AND metric_type = 'error'
+   GROUP BY error_type;
+
+4. Топ самых медленных функций:
+
+   SELECT module, function, AVG(avg_time) as avg
+   FROM function_metrics 
+   WHERE metric_type = 'time'
+   GROUP BY module, function
+   ORDER BY avg DESC
+   LIMIT 10;
+
+5. Процент ошибок функции:
+
+   SELECT 
+       (SELECT SUM(errors) FROM function_metrics WHERE function='register_user' AND metric_type='error') * 100.0 /
+       (SELECT MAX(calls) FROM function_metrics WHERE function='register_user' AND metric_type='call')
+   AS error_rate_percent;
+
+================================================================================
+                      МИГРАЦИЯ СО СТАРОЙ ВЕРСИИ
+================================================================================
+
+Если у вас была старая версия:
+
+1. Удалите старую БД:
+   Remove-Item logger/reports/metrics.db
+
+2. Удалите кэш Python:
+   Remove-Item -Recurse logger/__pycache__
+
+3. Запустите тест:
+   python test_metrics.py
+
+4. Новая БД создастся автоматически
+
+ВАЖНО: Старые данные будут потеряны! Если нужно сохранить - экспортируйте заранее.
+
+================================================================================
+                        ОБРАТНАЯ СОВМЕСТИМОСТЬ
+================================================================================
+
+НЕТ обратной совместимости со старой версией:
+- Изменена структура БД
+- Изменены имена функций API
+- Изменены имена колонок
+
+Все импорты нужно обновить:
+  from logger.t import monitor_function     →  from logger.tracer import trace
+  @monitor_function                          →  @trace
+  flush_metrics()                            →  flush()
+
+================================================================================
+                          ПРЕИМУЩЕСТВА
+================================================================================
+
+✅ Понятные названия колонок (calls вместо value/count)
+✅ Нет NULL значений (все поля заполнены)
+✅ Сохранение модуля (знаем откуда функция)
+✅ Округление времени до 4 знаков (0.1234 сек)
+✅ Короткий и чистый код (удален мертвый код)
+✅ Оптимизирован (меньше строк, быстрее)
+✅ Более понятная структура данных
+✅ Легче писать SQL запросы
+
+================================================================================
+

@@ -10,7 +10,7 @@ function loadRequests() {
             
             if (userRole === 'Ученик') {
                 // Для ученика - входящие заявки
-                html += '<h4>📨 Входящие заявки от учителей</h4>';
+                html += '<h4>Входящие заявки от учителей</h4>';
                 if (!data.requests || data.requests.length === 0) {
                     html += '<div class="alert alert-info">У вас нет новых заявок от учителей.</div>';
                 } else {
@@ -27,8 +27,8 @@ function loadRequests() {
                                         <p><strong>Дата:</strong> ${req.created_at}</p>
                                     </div>
                                     <div class="col-md-4 text-end">
-                                        <button class="btn btn-success mb-2" onclick="acceptRequest(${req.id})">✅ Принять</button><br>
-                                        <button class="btn btn-danger" onclick="rejectRequest(${req.id})">❌ Отклонить</button>
+                                        <button class="btn btn-success mb-2" onclick="acceptRequest(${req.id})">Принять</button><br>
+                                        <button class="btn btn-danger" onclick="rejectRequest(${req.id})">Отклонить</button>
                                     </div>
                                 </div>
                             </div>
@@ -37,7 +37,7 @@ function loadRequests() {
                 }
             } else if (userRole === 'Учитель') {
                 // Для учителя - отправка заявок
-                html += '<h4>📤 Отправка заявок ученикам</h4>';
+                html += '<h4>Отправка заявок ученикам</h4>';
                 if (!data.all_students || data.all_students.length === 0) {
                     html += '<div class="alert alert-info">В системе нет зарегистрированных учеников.</div>';
                 } else {
@@ -55,10 +55,10 @@ function loadRequests() {
                     html += '<label class="form-label">Сообщение (необязательно):</label>';
                     html += '<textarea class="form-control" id="requestMessage" rows="3" placeholder="Напишите короткое сообщение ученику..."></textarea>';
                     html += '</div>';
-                    html += '<button type="submit" class="btn btn-primary">📤 Отправить заявку</button>';
+                    html += '<button type="submit" class="btn btn-primary">Отправить заявку</button>';
                     html += '</form>';
                     html += '<hr>';
-                    html += '<h4>📋 Мои отправленные заявки</h4>';
+                    html += '<h4>Мои отправленные заявки</h4>';
                     if (!data.sent_requests || data.sent_requests.length === 0) {
                         html += '<div class="alert alert-info">Вы не отправляли заявок ученикам.</div>';
                     } else {

@@ -16,8 +16,9 @@ if project_root not in sys.path:
 from flask import session as flask_session
 from bot import topics
 from logger import console
-from logger.stats import log_error, log_debug
 from testing.generator_manager import generator_manager
+
+from logger.tracer import trace
 
 PYTHON_FILENAME = "testing"
 
@@ -43,15 +44,7 @@ TEST_TYPES = {
 SUBJECT_DATA = {
     "Алгебра": {"emojis": "🔢➕➖✖️➗", "comments": ["Икс найден! 🕵️", "Формулы покорены! 💪"]},
     "Геометрия": {"emojis": "📐📏🔺⬜", "comments": ["Теорема доказана! 👑", "Углы покорены! 🔺"]},
-    "Физика": {"emojis": "⚡🔬🌊🚀", "comments": ["Ньютон гордится! 🍎", "Законы соблюдены! ⚡"]},
-    "Химия": {"emojis": "🧪⚗️🔬💎", "comments": ["Реакция успешна! 💥", "Менделеев доволен! 👏"]},
-    "Биология": {"emojis": "🧬🔬🌱🦋", "comments": ["Дарвин восхищён! 🐒", "ДНК расшифрована! 🧬"]},
-    "География": {"emojis": "🌍🗺️🏔️🌊", "comments": ["Континенты найдены! 🗺️", "GPS не нужен! 🧭"]},
-    "История": {"emojis": "🏛️👑⚔️📜", "comments": ["История покорена! 👑", "Эпохи изучены! ⏳"]},
-    "Обществознание": {"emojis": "👥🏛️⚖️🗳️", "comments": ["Общество понято! 👥", "Социум под контролем! 🌐"]},
-    "Русский язык": {"emojis": "📝📚✒️📖", "comments": ["Пушкин аплодирует! 👏", "Грамматика покорена! ✍️"]},
-    "Английский язык": {"emojis": "🇬🇧🇺🇸💬📖", "comments": ["English conquered! 🎭", "Welcome to the club! 🎉"]},
-    "Информатика": {"emojis": "💻🖥️⌨️🤖", "comments": ["Код работает! 🐛❌", "Алгоритм оптимизирован! 🔥"]}
+    "Физика": {"emojis": "⚡🔬🌊🚀", "comments": ["Ньютон гордится! 🍎", "Законы соблюдены! ⚡"]}
 }
 
 class TestingManager:
@@ -61,12 +54,12 @@ class TestingManager:
         self.SUBJECTS_STRUCTURE = topics.SUBJECTS_STRUCTURE
         self.generator = generator_manager  # Используем новый GeneratorManager
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _get_difficulty_level(self, difficulty: str) -> int:
         """Преобразование названия сложности в числовой уровень для генератора"""
         return DIFFICULTY_LEVELS.get(difficulty, DIFFICULTY_LEVELS["Средний"]).get("level", 2)
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def init_testing_session(self):
         """Инициализация сессии тестирования"""
         try:
@@ -83,7 +76,7 @@ class TestingManager:
         except Exception:
             pass
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def show_testing_interface(self) -> Dict[str, Any]:
         """Главный интерфейс"""
         self.init_testing_session()
@@ -102,7 +95,7 @@ class TestingManager:
             'max_questions': MAX_QUESTIONS
         }
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def navigate_back(self):
         """Навигация назад"""
         self.init_testing_session()
@@ -120,13 +113,13 @@ class TestingManager:
             state['current_page'] = new_page
             state.update(updates)
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def show_subjects(self) -> Dict[str, Any]:
         """Список предметов"""
         self.init_testing_session()
         return {'subjects': list(self.SUBJECTS_STRUCTURE.keys()), 'subjects_structure': self.SUBJECTS_STRUCTURE}
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def show_sections(self, subject: str = None) -> Dict[str, Any]:
         """Разделы предмета"""
         if not subject:
@@ -142,7 +135,7 @@ class TestingManager:
             'sections': self.SUBJECTS_STRUCTURE[subject]["sections"]
         }
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def show_topics(self, subject: str = None, section: str = None) -> Dict[str, Any]:
         """Темы раздела"""
         if not subject or not section:
@@ -164,7 +157,7 @@ class TestingManager:
             'topics': self.SUBJECTS_STRUCTURE[subject]["sections"][section]["topics"]
         }
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def show_difficulty_selection(self) -> Dict[str, Any]:
         """Выбор сложности и настроек теста"""
         self.init_testing_session()
@@ -189,7 +182,7 @@ class TestingManager:
             'max_questions': MAX_QUESTIONS
         }
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def set_test_settings(self, test_type: str, num_questions: int) -> Dict[str, Any]:
         """Установка настроек теста"""
         self.init_testing_session()
@@ -213,7 +206,7 @@ class TestingManager:
             'num_questions': num_questions
         }
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def generate_test(self, subject: str, section: str, topic: str, difficulty: str, 
                       test_type: str = None, num_questions: int = None) -> Optional[Dict[str, Any]]:
         """Генерация теста через GeneratorManager"""
@@ -249,12 +242,11 @@ class TestingManager:
             return self._generate_local_test(subject, section, topic, difficulty, num_questions, with_options)
                 
         except Exception as e:
-            log_error(f"Ошибка генерации теста: {e}", PYTHON_FILENAME)
             return self._generate_local_test(subject, section, topic, difficulty, 
                                              num_questions or DEFAULT_NUM_QUESTIONS, 
                                              test_type != 'without_options')
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _generate_local_test(self, subject: str, section: str, topic: str, difficulty: str,
                              num_questions: int = DEFAULT_NUM_QUESTIONS,
                              with_options: bool = True) -> Dict:
@@ -346,7 +338,7 @@ class TestingManager:
             "test_type": "with_options" if with_options else "without_options"
         }
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _normalize_answer(self, answer: str) -> str:
         """Нормализация ответа для сравнения"""
         if not answer:
@@ -359,7 +351,7 @@ class TestingManager:
         normalized = re.sub(r'^x\s*=\s*', '', normalized)
         return normalized
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def _compare_answers(self, user_answer: str, correct_answer: str) -> bool:
         """Сравнение ответов с учётом разных форматов"""
         user_norm = self._normalize_answer(user_answer)
@@ -385,7 +377,7 @@ class TestingManager:
         
         return False
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def calculate_results(self) -> Optional[Dict[str, Any]]:
         """Подсчёт результатов"""
         try:
@@ -400,9 +392,6 @@ class TestingManager:
             
             questions = test['questions']
             
-            log_debug(f"Ответы пользователя: {answers}", PYTHON_FILENAME)
-            log_debug(f"Количество вопросов: {len(questions)}", PYTHON_FILENAME)
-            
             # Подсчёт правильных ответов
             correct = 0
             detailed_results = []
@@ -411,8 +400,6 @@ class TestingManager:
                 # Проверяем оба варианта ключа (строковый и целочисленный)
                 user_answer = answers.get(str(i), answers.get(i, ""))
                 correct_answer = q['correct_answer']
-                
-                log_debug(f"Вопрос {i}: ответ пользователя='{user_answer}', правильный='{correct_answer}'", PYTHON_FILENAME)
                 
                 # Для тестов с вариантами - точное сравнение, без вариантов - нормализованное
                 if test_type == 'with_options':
@@ -458,16 +445,15 @@ class TestingManager:
             flask_session.modified = True
             return results
         except Exception as e:
-            log_error(f"Ошибка подсчёта результатов: {e}", PYTHON_FILENAME)
             return None
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def get_funny_comment(self, subject: str) -> str:
         """Смешной комментарий для предмета"""
         data = SUBJECT_DATA.get(subject, {"comments": ["Отлично! 🎉"]})
         return random.choice(data["comments"])
     
-    @console.debug(PYTHON_FILENAME)
+    @trace
     def show_celebration(self, subject: str, percentage: float) -> Dict[str, Any]:
         """Данные для празднования"""
         data = SUBJECT_DATA.get(subject, {"emojis": "🎉✨", "comments": ["Молодец!"]})

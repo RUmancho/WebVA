@@ -5,6 +5,7 @@ import hashlib
 from datetime import datetime, timedelta
 from database.settings import DATABASE_URL
 from database.models import *
+from logger.tracer import trace
 
 class Database:
     """Класс для работы с базой данных через SQLAlchemy ORM"""
@@ -66,6 +67,7 @@ class Database:
         """Хеширование пароля"""
         return hashlib.sha256(password.encode("utf-8")).hexdigest()
     
+    @trace
     def register_user(self, user_data):
         """Регистрация нового пользователя"""
         session = self.get_session()
@@ -124,6 +126,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_user_by_email(self, email):
         """Получение пользователя по email"""
         session = self.get_session()
@@ -150,6 +153,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def reset_user_password(self, email, new_password):
         """Сброс пароля пользователя"""
         session = self.get_session()
@@ -184,6 +188,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def authenticate_user(self, email, password):
         """Аутентификация пользователя"""
         session = self.get_session()
@@ -233,6 +238,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_teachers(self):
         """Получение списка всех учителей"""
         session = self.get_session()
@@ -259,6 +265,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_user_by_id(self, user_id):
         """Получение пользователя по ID"""
         session = self.get_session()
@@ -285,6 +292,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def delete_user(self, user_id, email, password):
         """Удаление пользователя с подтверждением"""
         session = self.get_session()
@@ -329,6 +337,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def create_teacher_request(self, teacher_id, student_id, message=""):
         """Создание заявки от учителя к ученику"""
         session = self.get_session()
@@ -366,6 +375,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_student_requests(self, student_id):
         """Получение заявок для ученика"""
         session = self.get_session()
@@ -397,6 +407,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def accept_teacher_request(self, request_id, student_id):
         """Принятие заявки от учителя"""
         session = self.get_session()
@@ -436,6 +447,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def reject_teacher_request(self, request_id, student_id):
         """Отклонение заявки от учителя"""
         session = self.get_session()
@@ -465,6 +477,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_student_teachers(self, student_id):
         """Получение списка учителей ученика"""
         session = self.get_session()
@@ -493,6 +506,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def create_call(self, student_id, teacher_id, scheduled_time, duration_minutes=60, notes=""):
         """Создание записи о звонке"""
         session = self.get_session()
@@ -519,6 +533,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def start_call(self, call_id):
         """Начало звонка"""
         session = self.get_session()
@@ -544,6 +559,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def end_call(self, call_id, recording_path=""):
         """Завершение звонка и создание записи урока"""
         session = self.get_session()
@@ -589,6 +605,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_user_calls(self, user_id):
         """Получение звонков пользователя"""
         session = self.get_session()
@@ -640,6 +657,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def cleanup_expired_records(self):
         """Очистка просроченных записей уроков (старше 2 дней)"""
         session = self.get_session()
@@ -666,6 +684,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def create_lesson_record(self, student_id, teacher_id, lesson_title, lesson_date, subject="", video_url="", video_file_path="", description="", homework=""):
         """Создание записи урока"""
         session = self.get_session()
@@ -696,6 +715,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_user_lesson_records(self, user_id):
         """Получение записей уроков пользователя"""
         session = self.get_session()
@@ -754,6 +774,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_all_students(self):
         """Получение списка всех учеников"""
         session = self.get_session()
@@ -781,6 +802,75 @@ class Database:
         finally:
             session.close()
     
+    @trace
+    def get_pending_requests_for_student(self, student_id):
+        """Получение входящих заявок для ученика"""
+        session = self.get_session()
+        try:
+            requests = session.query(TeacherRequest, User).join(
+                User, TeacherRequest.teacher_id == User.id
+            ).filter(
+                TeacherRequest.student_id == student_id,
+                TeacherRequest.status == 'pending'
+            ).order_by(TeacherRequest.created_at.desc()).all()
+            
+            requests_list = []
+            for request, teacher in requests:
+                requests_list.append({
+                    'id': request.id,
+                    'teacher_id': request.teacher_id,
+                    'first_name': teacher.first_name,
+                    'last_name': teacher.last_name,
+                    'email': teacher.email,
+                    'subjects': teacher.subjects if hasattr(teacher, 'subjects') else None,
+                    'school': teacher.school,
+                    'city': teacher.city,
+                    'message': request.message,
+                    'created_at': request.created_at.strftime('%Y-%m-%d %H:%M') if request.created_at else None
+                })
+            
+            return requests_list
+            
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения входящих заявок: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+        finally:
+            session.close()
+    
+    @trace
+    def get_requests_by_teacher(self, teacher_id):
+        """Получение всех заявок отправленных учителем"""
+        session = self.get_session()
+        try:
+            requests = session.query(TeacherRequest, User).join(
+                User, TeacherRequest.student_id == User.id
+            ).filter(TeacherRequest.teacher_id == teacher_id).order_by(TeacherRequest.created_at.desc()).all()
+            
+            requests_list = []
+            for request, student in requests:
+                requests_list.append({
+                    'id': request.id,
+                    'student_id': request.student_id,
+                    'student_name': f"{student.first_name} {student.last_name}",
+                    'student_email': student.email,
+                    'status': request.status,
+                    'message': request.message,
+                    'created_at': request.created_at.strftime('%Y-%m-%d %H:%M') if request.created_at else None
+                })
+            
+            return requests_list
+            
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения отправленных заявок: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+        finally:
+            session.close()
+    
+    @trace
     def get_teacher_sent_requests(self, teacher_id):
         """Получение отправленных заявок учителя"""
         session = self.get_session()
@@ -809,6 +899,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_teacher_students(self, teacher_id):
         """Получение учеников учителя"""
         session = self.get_session()
@@ -838,6 +929,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def update_user_online_status(self, user_id, is_online):
         """Обновление статуса онлайн пользователя"""
         session = self.get_session()
@@ -855,6 +947,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_user_notifications(self, user_id):
         """Получение уведомлений пользователя"""
         session = self.get_session()
@@ -881,6 +974,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def mark_notification_read(self, notification_id, user_id):
         """Отметить уведомление как прочитанное"""
         session = self.get_session()
@@ -902,6 +996,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def create_notification(self, user_id, title, message):
         """Создание нового уведомления"""
         session = self.get_session()
@@ -925,6 +1020,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_teacher_students_tree(self, teacher_id):
         """Получение древовидной структуры учеников учителя: Город → Школа → Класс → Ученики"""
         session = self.get_session()
@@ -968,6 +1064,7 @@ class Database:
 
     # ==================== Методы для настроек пользователя ====================
     
+    @trace
     def get_user_settings(self, user_id):
         """Получение настроек пользователя"""
         session = self.get_session()
@@ -982,6 +1079,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def update_user_settings(self, user_id, settings_data):
         """Обновление настроек пользователя"""
         session = self.get_session()
@@ -1011,6 +1109,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def reset_user_settings(self, user_id):
         """Сброс настроек пользователя к значениям по умолчанию"""
         session = self.get_session()
@@ -1034,6 +1133,7 @@ class Database:
     
     # ==================== Методы для заданий классу ====================
     
+    @trace
     def create_class_assignment(self, teacher_id, title, description, subject, topic, 
                                  difficulty, assignment_type, questions_json,
                                  target_city, target_school, target_class, deadline=None):
@@ -1097,6 +1197,7 @@ class Database:
         
         return query.all()
     
+    @trace
     def get_teacher_assignments(self, teacher_id):
         """Получение заданий учителя"""
         session = self.get_session()
@@ -1136,6 +1237,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_student_assignments(self, student_id):
         """Получение заданий для ученика"""
         session = self.get_session()
@@ -1206,6 +1308,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_assignment_by_id(self, assignment_id):
         """Получение задания по ID"""
         session = self.get_session()
@@ -1243,6 +1346,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def submit_assignment(self, assignment_id, student_id, answers_json, score, max_score, time_spent=0):
         """Отправка ответа на задание"""
         session = self.get_session()
@@ -1283,6 +1387,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_assignment_statistics(self, assignment_id):
         """Получение статистики по заданию"""
         session = self.get_session()
@@ -1348,6 +1453,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def get_class_statistics(self, teacher_id, city=None, school=None, class_number=None):
         """Получение статистики по классу"""
         session = self.get_session()
@@ -1409,6 +1515,7 @@ class Database:
         finally:
             session.close()
     
+    @trace
     def toggle_assignment_active(self, assignment_id, teacher_id):
         """Активация/деактивация задания"""
         session = self.get_session()

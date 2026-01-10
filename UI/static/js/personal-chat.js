@@ -96,7 +96,7 @@ function renderPersonalChatMessages(userId) {
     html += `<form onsubmit="sendPersonalMessage(event, ${userId})">`;
     html += '<div class="input-group">';
     html += '<input type="text" class="form-control" id="personalMessageInput" placeholder="Введите сообщение..." required>';
-    html += '<button class="btn btn-primary" type="submit">📤 Отправить</button>';
+    html += '<button class="btn btn-primary" type="submit">Отправить</button>';
     html += '</div>';
     html += '</form>';
     

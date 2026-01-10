@@ -1,82 +1,213 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="text-center mb-4">
-            <h1 class="display-4">🎓 Система регистрации учителей и учеников</h1>
-            <hr>
+<style>
+.login-container {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.login-card {
+    background: var(--card-bg);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    padding: 40px;
+    max-width: 450px;
+    width: 100%;
+    border: 1px solid rgba(102, 126, 234, 0.2);
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.login-header h1 {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.login-header p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.input-group-custom {
+    position: relative;
+    margin-bottom: 25px;
+}
+
+.input-group-custom label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.input-with-icon {
+    position: relative;
+}
+
+.input-with-icon input {
+    padding-left: 45px;
+    height: 50px;
+    border-radius: 10px;
+    border: 2px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+.input-with-icon input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.input-icon {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+}
+
+.btn-login {
+    width: 100%;
+    height: 50px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    margin-top: 10px;
+}
+
+.btn-login:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+}
+
+.btn-register {
+    width: 100%;
+    height: 50px;
+    border-radius: 10px;
+    background: transparent;
+    border: 2px solid var(--input-border);
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    margin-top: 10px;
+}
+
+.btn-register:hover {
+    border-color: #667eea;
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.05);
+}
+
+.forgot-password {
+    text-align: right;
+    margin-top: -15px;
+    margin-bottom: 20px;
+}
+
+.forgot-password a {
+    color: #667eea;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.forgot-password a:hover {
+    color: #764ba2;
+    text-decoration: underline;
+}
+
+.divider {
+    text-align: center;
+    margin: 25px 0;
+    position: relative;
+}
+
+.divider::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 100%;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.divider span {
+    background: var(--card-bg);
+    padding: 0 15px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    position: relative;
+    z-index: 1;
+}
+</style>
+
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <h1>WebVA</h1>
+            <p>Образовательная платформа</p>
         </div>
         
-        <div class="card">
-            <div class="card-body">
-                <h2 class="card-title text-center mb-4">🔐 Вход в систему</h2>
-                
-                <form method="POST" action="{{ url_for('login') }}">
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" name="email" 
-                               placeholder="example@mail.com" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Пароль</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
-                    </div>
-                    
-                    <div class="mb-3 text-end">
-                        <a href="{{ url_for('forgot_password') }}" class="text-decoration-none">Забыли пароль?</a>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6 mb-2">
-                            <button type="submit" class="btn btn-primary w-100">Войти</button>
-                        </div>
-                        <div class="col-md-6 mb-2">
-                            <a href="{{ url_for('register') }}" class="btn btn-outline-secondary w-100">Регистрация</a>
-                        </div>
-                    </div>
-                </form>
+        <form method="POST" action="{{ url_for('login') }}">
+            <div class="input-group-custom">
+                <label for="email">Email адрес</label>
+                <div class="input-with-icon">
+                    <span class="input-icon">📧</span>
+                    <input type="email" class="form-control" id="email" name="email" 
+                           placeholder="example@mail.com" required>
+                </div>
             </div>
-        </div>
-        
-        <div class="card mt-4">
-            <div class="card-body">
-                <h5 class="card-title">ℹ️ Информация</h5>
-                <p class="card-text">
-                    <strong>Добро пожаловать в образовательную систему!</strong><br><br>
-                    
-                    Здесь вы можете:
-                    <ul>
-                        <li>Зарегистрироваться как ученик или учитель</li>
-                        <li>Найти учителей по предметам</li>
-                        <li>Изучать теоретические материалы</li>
-                        <li>Проходить тесты по школьным предметам</li>
-                        <li>Получить помощь от чат-бота</li>
-                        <li>Проводить видеозвонки на встроенной платформе</li>
-                    </ul>
-                    
-                    <strong>Для учеников:</strong>
-                    <ul>
-                        <li>Просмотр и связь с учителями</li>
-                        <li>Принятие заявок от учителей</li>
-                        <li>Изучение теории по 11 предметам</li>
-                        <li>Тестирование с AI-генерацией вопросов</li>
-                        <li>Участие в видеозвонках</li>
-                        <li>Скачивание записей уроков (доступны 2 дня)</li>
-                    </ul>
-                    
-                    <strong>Для учителей:</strong>
-                    <ul>
-                        <li>Отправка заявок ученикам</li>
-                        <li>Планирование видеозвонков</li>
-                        <li>Автоматическая запись уроков</li>
-                        <li>Создание ручных записей уроков</li>
-                        <li>Система тестирования учеников</li>
-                    </ul>
-                </p>
+            
+            <div class="input-group-custom">
+                <label for="password">Пароль</label>
+                <div class="input-with-icon">
+                    <span class="input-icon">🔒</span>
+                    <input type="password" class="form-control" id="password" name="password" 
+                           placeholder="Введите пароль" required>
+                </div>
             </div>
-        </div>
+            
+            <div class="forgot-password">
+                <a href="{{ url_for('forgot_password') }}">Забыли пароль?</a>
+            </div>
+            
+            <button type="submit" class="btn btn-login">Войти в систему</button>
+            
+            <div class="divider">
+                <span>или</span>
+            </div>
+            
+            <a href="{{ url_for('register') }}" class="btn btn-register">Создать аккаунт</a>
+        </form>
+    </div>
+</div>
     </div>
 </div>
 {% endblock %}

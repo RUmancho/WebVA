@@ -114,57 +114,179 @@ GENERATORS: Dict[str, Dict[str, Dict[str, GeneratorType]]] = {
     
     # ========================== ХИМИЯ ==========================
     "Химия": {
-        "Общая химия": {
-            "Атомное строение": GeneratorType.AI,
+        "Неорганическая химия": {
+            "Строение атома": GeneratorType.AI,
             "Периодическая система": GeneratorType.AI,
             "Химическая связь": GeneratorType.AI,
-            "Валентность": GeneratorType.AI,
-            "Степень окисления": GeneratorType.AI,
-            "Типы химических реакций": GeneratorType.AI,
-        },
-        "Неорганическая химия": {
+            "Классы неорганических соединений": GeneratorType.AI,
             "Металлы": GeneratorType.AI,
             "Неметаллы": GeneratorType.AI,
-            "Кислоты": GeneratorType.AI,
-            "Основания": GeneratorType.AI,
-            "Соли": GeneratorType.AI,
-            "Оксиды": GeneratorType.AI,
         },
         "Органическая химия": {
             "Углеводороды": GeneratorType.AI,
-            "Спирты": GeneratorType.AI,
+            "Спирты и фенолы": GeneratorType.AI,
             "Альдегиды и кетоны": GeneratorType.AI,
             "Карбоновые кислоты": GeneratorType.AI,
             "Амины": GeneratorType.AI,
             "Белки и углеводы": GeneratorType.AI,
         },
+        "Химические реакции": {
+            "Типы химических реакций": GeneratorType.AI,
+            "Окислительно-восстановительные реакции": GeneratorType.AI,
+            "Электролитическая диссоциация": GeneratorType.AI,
+            "Гидролиз": GeneratorType.AI,
+            "Скорость химических реакций": GeneratorType.AI,
+        },
+    },
+    
+    # ========================== БИОЛОГИЯ ==========================
+    "Биология": {
+        "Ботаника": {
+            "Строение растительной клетки": GeneratorType.AI,
+            "Ткани растений": GeneratorType.AI,
+            "Корень, стебель, лист": GeneratorType.AI,
+            "Фотосинтез": GeneratorType.AI,
+            "Размножение растений": GeneratorType.AI,
+            "Систематика растений": GeneratorType.AI,
+        },
+        "Зоология": {
+            "Простейшие": GeneratorType.AI,
+            "Беспозвоночные": GeneratorType.AI,
+            "Позвоночные": GeneratorType.AI,
+            "Млекопитающие": GeneratorType.AI,
+            "Птицы": GeneratorType.AI,
+            "Рыбы и земноводные": GeneratorType.AI,
+        },
+        "Анатомия человека": {
+            "Опорно-двигательная система": GeneratorType.AI,
+            "Кровеносная система": GeneratorType.AI,
+            "Дыхательная система": GeneratorType.AI,
+            "Пищеварительная система": GeneratorType.AI,
+            "Нервная система": GeneratorType.AI,
+            "Органы чувств": GeneratorType.AI,
+        },
+        "Общая биология": {
+            "Клетка": GeneratorType.AI,
+            "Генетика": GeneratorType.AI,
+            "Эволюция": GeneratorType.AI,
+            "Экология": GeneratorType.AI,
+        },
     },
     
     # ========================== РУССКИЙ ЯЗЫК ==========================
     "Русский язык": {
+        "Фонетика": {
+            "Звуки и буквы": GeneratorType.AI,
+            "Ударение": GeneratorType.AI,
+            "Слог": GeneratorType.AI,
+        },
+        "Морфемика": {
+            "Состав слова": GeneratorType.AI,
+            "Корень и основа": GeneratorType.AI,
+            "Приставки и суффиксы": GeneratorType.AI,
+        },
         "Морфология": {
             "Имя существительное": GeneratorType.AI,
             "Имя прилагательное": GeneratorType.AI,
             "Глагол": GeneratorType.AI,
-            "Наречие": GeneratorType.AI,
             "Местоимение": GeneratorType.AI,
-            "Числительное": GeneratorType.AI,
+            "Наречие": GeneratorType.AI,
+            "Причастие и деепричастие": GeneratorType.AI,
         },
         "Синтаксис": {
+            "Словосочетание": GeneratorType.AI,
             "Простое предложение": GeneratorType.AI,
             "Сложное предложение": GeneratorType.AI,
-            "Однородные члены": GeneratorType.AI,
-            "Обособленные члены": GeneratorType.AI,
-            "Вводные слова": GeneratorType.AI,
             "Прямая и косвенная речь": GeneratorType.AI,
         },
         "Орфография": {
-            "Правописание корней": GeneratorType.AI,
+            "Правописание гласных": GeneratorType.AI,
+            "Правописание согласных": GeneratorType.AI,
             "Правописание приставок": GeneratorType.AI,
-            "Правописание суффиксов": GeneratorType.AI,
-            "Правописание окончаний": GeneratorType.AI,
             "НЕ с разными частями речи": GeneratorType.AI,
-            "Н и НН в разных частях речи": GeneratorType.AI,
+        },
+        "Пунктуация": {
+            "Знаки препинания в простом предложении": GeneratorType.AI,
+            "Знаки препинания в сложном предложении": GeneratorType.AI,
+            "Обособленные члены предложения": GeneratorType.AI,
+        },
+    },
+    
+    # ========================== ЛИТЕРАТУРА ==========================
+    "Литература": {
+        "Теория литературы": {
+            "Роды и жанры литературы": GeneratorType.AI,
+            "Литературные направления": GeneratorType.AI,
+            "Средства художественной выразительности": GeneratorType.AI,
+            "Стихосложение": GeneratorType.AI,
+        },
+        "Русская литература XIX века": {
+            "А.С. Пушкин": GeneratorType.AI,
+            "М.Ю. Лермонтов": GeneratorType.AI,
+            "Н.В. Гоголь": GeneratorType.AI,
+            "Л.Н. Толстой": GeneratorType.AI,
+            "Ф.М. Достоевский": GeneratorType.AI,
+        },
+        "Русская литература XX века": {
+            "М. Горький": GeneratorType.AI,
+            "М.А. Булгаков": GeneratorType.AI,
+            "М.А. Шолохов": GeneratorType.AI,
+            "А.А. Ахматова": GeneratorType.AI,
+            "Б.Л. Пастернак": GeneratorType.AI,
+        },
+    },
+    
+    # ========================== ИСТОРИЯ ==========================
+    "История": {
+        "История России": {
+            "Древняя Русь": GeneratorType.AI,
+            "Московское государство": GeneratorType.AI,
+            "Российская империя": GeneratorType.AI,
+            "СССР": GeneratorType.AI,
+            "Современная Россия": GeneratorType.AI,
+        },
+        "Всеобщая история": {
+            "Древний мир": GeneratorType.AI,
+            "Средние века": GeneratorType.AI,
+            "Новое время": GeneratorType.AI,
+            "Новейшее время": GeneratorType.AI,
+            "Великие географические открытия": GeneratorType.AI,
+        },
+        "Культура и быт": {
+            "Культура Древней Руси": GeneratorType.AI,
+            "Культура XVIII века": GeneratorType.AI,
+            "Культура XIX века": GeneratorType.AI,
+            "Культура XX века": GeneratorType.AI,
+        },
+    },
+    
+    # ========================== ОБЩЕСТВОЗНАНИЕ ==========================
+    "Обществознание": {
+        "Человек и общество": {
+            "Природа человека": GeneratorType.AI,
+            "Деятельность": GeneratorType.AI,
+            "Познание": GeneratorType.AI,
+            "Общество и его структура": GeneratorType.AI,
+        },
+        "Экономика": {
+            "Экономические системы": GeneratorType.AI,
+            "Рынок и рыночная экономика": GeneratorType.AI,
+            "Спрос и предложение": GeneratorType.AI,
+            "Деньги и инфляция": GeneratorType.AI,
+            "Налоги": GeneratorType.AI,
+        },
+        "Политика": {
+            "Государство и его формы": GeneratorType.AI,
+            "Политические режимы": GeneratorType.AI,
+            "Избирательные системы": GeneratorType.AI,
+            "Политические партии": GeneratorType.AI,
+        },
+        "Право": {
+            "Конституция РФ": GeneratorType.AI,
+            "Права и свободы человека": GeneratorType.AI,
+            "Гражданское право": GeneratorType.AI,
+            "Уголовное право": GeneratorType.AI,
+            "Семейное право": GeneratorType.AI,
         },
     },
     
@@ -173,108 +295,15 @@ GENERATORS: Dict[str, Dict[str, Dict[str, GeneratorType]]] = {
         "Грамматика": {
             "Времена глаголов": GeneratorType.AI,
             "Артикли": GeneratorType.AI,
-            "Местоимения": GeneratorType.AI,
             "Модальные глаголы": GeneratorType.AI,
-            "Условные предложения": GeneratorType.AI,
             "Пассивный залог": GeneratorType.AI,
+            "Условные предложения": GeneratorType.AI,
         },
         "Лексика": {
+            "Словообразование": GeneratorType.AI,
             "Фразовые глаголы": GeneratorType.AI,
             "Идиомы": GeneratorType.AI,
-            "Словообразование": GeneratorType.AI,
-            "Синонимы и антонимы": GeneratorType.AI,
             "Устойчивые выражения": GeneratorType.AI,
-        },
-        "Разговорная речь": {
-            "Повседневные диалоги": GeneratorType.AI,
-            "Описание людей и мест": GeneratorType.AI,
-            "Выражение мнения": GeneratorType.AI,
-            "Рассказ о событиях": GeneratorType.AI,
-            "Деловое общение": GeneratorType.AI,
-        },
-    },
-    
-    # ========================== ИСТОРИЯ ==========================
-    "История": {
-        "Древний мир": {
-            "Первобытное общество": GeneratorType.AI,
-            "Древний Египет": GeneratorType.AI,
-            "Древняя Греция": GeneratorType.AI,
-            "Древний Рим": GeneratorType.AI,
-            "Древний Восток": GeneratorType.AI,
-            "Великое переселение народов": GeneratorType.AI,
-        },
-        "Средние века": {
-            "Феодализм": GeneratorType.AI,
-            "Крестовые походы": GeneratorType.AI,
-            "Византийская империя": GeneratorType.AI,
-            "Арабские завоевания": GeneratorType.AI,
-            "Монгольские завоевания": GeneratorType.AI,
-            "Возрождение": GeneratorType.AI,
-        },
-        "Новое время": {
-            "Великие географические открытия": GeneratorType.AI,
-            "Реформация": GeneratorType.AI,
-            "Промышленная революция": GeneratorType.AI,
-            "Французская революция": GeneratorType.AI,
-            "Наполеоновские войны": GeneratorType.AI,
-            "Колониализм": GeneratorType.AI,
-        },
-    },
-    
-    # ========================== ОБЩЕСТВОЗНАНИЕ ==========================
-    "Обществознание": {
-        "Человек и общество": {
-            "Природа человека": GeneratorType.AI,
-            "Социализация": GeneratorType.AI,
-            "Общество как система": GeneratorType.AI,
-            "Социальные институты": GeneratorType.AI,
-            "Культура": GeneratorType.AI,
-            "Глобализация": GeneratorType.AI,
-        },
-        "Политика": {
-            "Государство": GeneratorType.AI,
-            "Формы правления": GeneratorType.AI,
-            "Политические режимы": GeneratorType.AI,
-            "Избирательные системы": GeneratorType.AI,
-            "Политические партии": GeneratorType.AI,
-            "Гражданское общество": GeneratorType.AI,
-        },
-        "Экономика": {
-            "Рыночная экономика": GeneratorType.AI,
-            "Спрос и предложение": GeneratorType.AI,
-            "Конкуренция": GeneratorType.AI,
-            "Деньги и банки": GeneratorType.AI,
-            "Инфляция": GeneratorType.AI,
-            "Безработица": GeneratorType.AI,
-        },
-    },
-    
-    # ========================== ГЕОГРАФИЯ ==========================
-    "География": {
-        "Физическая география": {
-            "Литосфера": GeneratorType.AI,
-            "Атмосфера": GeneratorType.AI,
-            "Гидросфера": GeneratorType.AI,
-            "Биосфера": GeneratorType.AI,
-            "Климат": GeneratorType.AI,
-            "Природные зоны": GeneratorType.AI,
-        },
-        "Экономическая география": {
-            "Население мира": GeneratorType.AI,
-            "Промышленность": GeneratorType.AI,
-            "Сельское хозяйство": GeneratorType.AI,
-            "Транспорт": GeneratorType.AI,
-            "Мировое хозяйство": GeneratorType.AI,
-            "Глобальные проблемы": GeneratorType.AI,
-        },
-        "География России": {
-            "Географическое положение": GeneratorType.AI,
-            "Рельеф и недра": GeneratorType.AI,
-            "Климат России": GeneratorType.AI,
-            "Внутренние воды": GeneratorType.AI,
-            "Природные зоны России": GeneratorType.AI,
-            "Население России": GeneratorType.AI,
         },
     },
     
@@ -286,51 +315,41 @@ GENERATORS: Dict[str, Dict[str, Dict[str, GeneratorType]]] = {
             "Условные операторы": GeneratorType.AI,
             "Циклы": GeneratorType.AI,
             "Функции": GeneratorType.AI,
-            "Массивы": GeneratorType.AI,
         },
-        "Информация и данные": {
-            "Системы счисления": GeneratorType.AI,
-            "Кодирование информации": GeneratorType.AI,
-            "Базы данных": GeneratorType.AI,
-            "Файловые системы": GeneratorType.AI,
-            "Сжатие данных": GeneratorType.AI,
-            "Защита информации": GeneratorType.AI,
+        "Системы счисления": {
+            "Двоичная система": GeneratorType.AI,
+            "Восьмеричная система": GeneratorType.AI,
+            "Шестнадцатеричная система": GeneratorType.AI,
+            "Перевод чисел": GeneratorType.AI,
         },
-        "Компьютерные сети": {
-            "Интернет": GeneratorType.AI,
-            "Протоколы передачи данных": GeneratorType.AI,
-            "Веб-технологии": GeneratorType.AI,
-            "Электронная почта": GeneratorType.AI,
-            "Безопасность в сети": GeneratorType.AI,
-            "Облачные технологии": GeneratorType.AI,
+        "Логика": {
+            "Логические операции": GeneratorType.AI,
+            "Таблицы истинности": GeneratorType.AI,
+            "Логические выражения": GeneratorType.AI,
         },
     },
     
-    # ========================== БИОЛОГИЯ ==========================
-    "Биология": {
-        "Общая биология": {
-            "Клеточная теория": GeneratorType.AI,
-            "Строение клетки": GeneratorType.AI,
-            "Обмен веществ": GeneratorType.AI,
-            "Размножение": GeneratorType.AI,
-            "Наследственность": GeneratorType.AI,
-            "Эволюция": GeneratorType.AI,
+    # ========================== ГЕОГРАФИЯ ==========================
+    "География": {
+        "Физическая география": {
+            "План и карта": GeneratorType.AI,
+            "Литосфера": GeneratorType.AI,
+            "Гидросфера": GeneratorType.AI,
+            "Атмосфера": GeneratorType.AI,
+            "Биосфера": GeneratorType.AI,
         },
-        "Ботаника": {
-            "Строение растений": GeneratorType.AI,
-            "Фотосинтез": GeneratorType.AI,
-            "Размножение растений": GeneratorType.AI,
-            "Систематика растений": GeneratorType.AI,
-            "Экология растений": GeneratorType.AI,
-            "Значение растений": GeneratorType.AI,
+        "География России": {
+            "Географическое положение России": GeneratorType.AI,
+            "Рельеф и полезные ископаемые": GeneratorType.AI,
+            "Климат": GeneratorType.AI,
+            "Внутренние воды": GeneratorType.AI,
+            "Природные зоны": GeneratorType.AI,
         },
-        "Зоология": {
-            "Простейшие": GeneratorType.AI,
-            "Беспозвоночные": GeneratorType.AI,
-            "Позвоночные": GeneratorType.AI,
-            "Поведение животных": GeneratorType.AI,
-            "Экология животных": GeneratorType.AI,
-            "Эволюция животного мира": GeneratorType.AI,
+        "Экономическая география": {
+            "Население": GeneratorType.AI,
+            "Хозяйство России": GeneratorType.AI,
+            "Промышленность": GeneratorType.AI,
+            "Сельское хозяйство": GeneratorType.AI,
         },
     },
 }

@@ -1,0 +1,13 @@
+flask
+sqlalchemy
+openai
+opentelemetry-api
+opentelemetry-sdk
+psutil
+langchain-ollama
+langchain-openai
+langchain-core
+markdown
+cffi
+requests
+python-dotenv

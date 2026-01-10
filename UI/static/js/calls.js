@@ -45,7 +45,7 @@ function loadCalls() {
                     html += '</div>';
                     html += '</div>';
                     html += '<div class="alert alert-info">💡 Звонок будет проходить на встроенной платформе. Запись автоматически сохранится в разделе "Записи уроков" и будет доступна в течение 2 дней.</div>';
-                    html += '<button type="submit" class="btn btn-primary">📞 Запланировать звонок</button>';
+                    html += '<button type="submit" class="btn btn-primary">Запланировать звонок</button>';
                     html += '</form>';
                     html += '<hr>';
                 }
@@ -117,7 +117,7 @@ function renderCallCard(call, status, userRole) {
         html += `<button class="btn btn-success" onclick="startCall(${call.id})">🟢 Начать</button>`;
     } else if (status === 'active') {
         html += '<p class="text-danger"><strong>🔴 В эфире</strong></p>';
-        html += `<button class="btn btn-danger" onclick="endCall(${call.id})">⏹️ Завершить</button>`;
+        html += `<button class="btn btn-danger" onclick="endCall(${call.id})">Завершить</button>`;
     } else if (status === 'completed') {
         if (call.recording_path) {
             html += '<p>📹 Записан</p>';

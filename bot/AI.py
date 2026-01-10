@@ -16,7 +16,6 @@ from flask import session
 from bot.prompt import Prompt
 from bot.prompt_registry import Math
 from bot import chat
-from logger import console
 
 PYTHON_FILENAME = "AI"
 
@@ -34,7 +33,6 @@ class ChatBot:
         if 'chat_messages' not in session:
             session['chat_messages'] = []
     
-    @console.debug(PYTHON_FILENAME)
     def add_message(self, role: str, content: str):
         """Добавить сообщение в историю чата."""
         self.init_chat_session()
@@ -54,7 +52,6 @@ class ChatBot:
         session['chat_messages'] = []
         session.modified = True
     
-    @console.debug(PYTHON_FILENAME)
     def get_bot_response(self, user_message: str) -> str:
         """
         Получить ответ бота на сообщение пользователя.
@@ -113,7 +110,6 @@ class ChatBot:
         
         return "Извините, произошла ошибка. Попробуйте переформулировать вопрос."
     
-    @console.debug(PYTHON_FILENAME)
     def explain_theory(self, topic: str) -> str:
         """
         Объяснить теорию по теме.

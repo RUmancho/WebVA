@@ -73,7 +73,7 @@ function loadLessons() {
                     html += '<textarea class="form-control" id="lessonHomework" rows="3" placeholder="Задания для самостоятельного выполнения..."></textarea>';
                     html += '</div>';
                     html += '<div class="alert alert-info">💡 Ручные записи уроков сохраняются постоянно (в отличие от автоматических записей звонков)</div>';
-                    html += '<button type="submit" class="btn btn-primary">💾 Создать запись урока</button>';
+                    html += '<button type="submit" class="btn btn-primary">Создать запись урока</button>';
                     html += '</form>';
                     html += '<hr>';
                 }
@@ -169,7 +169,7 @@ function renderLessonCard(record, isAuto, userRole) {
     html += `<div class="mb-2">`;
     html += `<input type="number" class="form-control" id="timestamp-${record.id}" min="0" value="0" placeholder="Временная метка видео (секунды, необязательно)">`;
     html += `</div>`;
-    html += `<button type="submit" class="btn btn-sm btn-primary">💬 Добавить комментарий</button>`;
+    html += `<button type="submit" class="btn btn-sm btn-primary">Добавить комментарий</button>`;
     html += `</form>`;
     
     html += `</div></div>`;

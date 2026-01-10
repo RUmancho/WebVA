@@ -1,1 +1,209 @@
-<div class="card"><div class="card-body"><h2 class="card-title">📝 Система тестирования</h2><div id="testing-loading" class="text-center" style="display: none;"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div><p class="mt-2">Генерация теста...</p></div><div id="testing-error" class="alert alert-danger" style="display: none;"></div><nav id="testing-breadcrumbs" aria-label="breadcrumb" style="display: none;"><ol class="breadcrumb"></ol></nav><div id="testing-content"><div id="testing-subjects" class="testing-page"><h4>Выберите предмет для тестирования:</h4><div class="alert alert-success"> 🎓 Добро пожаловать в систему тестирования! Выберите предмет и проверьте свои знания! </div><div class="row" id="testing-subjects-list"></div></div><div id="testing-sections" class="testing-page" style="display: none;"><h4 id="testing-sections-title"></h4><div class="list-group" id="testing-sections-list"></div></div><div id="testing-topics" class="testing-page" style="display: none;"><h4 id="testing-topics-title"></h4><div class="list-group" id="testing-topics-list"></div></div><div id="testing-difficulty" class="testing-page" style="display: none;"><h4 id="difficulty-title"></h4><div id="generator-info" class="alert alert-info mb-3" style="display: none;"></div><div class="card mb-4"><div class="card-header"><h5 class="mb-0">⚙️ Настройки теста</h5></div><div class="card-body"><div class="row"><div class="col-md-6 mb-3"><label class="form-label fw-bold">Тип теста:</label><div class="form-check"><input class="form-check-input" type="radio" name="test_type" id="test_type_with_options" value="with_options" checked><label class="form-check-label" for="test_type_with_options"> 📝 С вариантами ответов <small class="text-muted d-block">Выберите правильный вариант из предложенных</small></label></div><div class="form-check mt-2"><input class="form-check-input" type="radio" name="test_type" id="test_type_without_options" value="without_options"><label class="form-check-label" for="test_type_without_options"> ✍️ Без вариантов ответов <small class="text-muted d-block">Введите ответ самостоятельно</small></label></div></div><div class="col-md-6 mb-3"><label for="num_questions" class="form-label fw-bold">Количество вопросов:</label><input type="number" class="form-control" id="num_questions" value="5" min="3" max="20" style="max-width: 120px;"><small class="text-muted">От 3 до 20 вопросов</small></div></div></div></div><div class="alert alert-info"> 💡 Совет: Начните с лёгкого уровня, если изучаете тему впервые! </div><h5 class="mb-3">Выберите уровень сложности:</h5><div id="difficulty-list"></div></div><div id="testing-test" class="testing-page" style="display: none;"><div class="d-flex justify-content-between align-items-center mb-3"><h4 id="test-title"></h4><div><button class="btn btn-sm btn-outline-secondary" onclick="regenerateTest()">🔄 Новый тест</button><button class="btn btn-sm btn-outline-danger" onclick="testingNavigate('topics')">🎯 Другая тема</button></div></div><div id="test-info" class="alert alert-secondary mb-3"><span id="test-type-badge"></span><span id="test-generator-badge" class="ms-2"></span></div><div class="progress mb-3"><div id="test-progress" class="progress-bar" role="progressbar" style="width: 0%"></div></div><div id="test-questions"></div><div class="mt-3"><button id="finish-test-btn" class="btn btn-success btn-lg" onclick="finishTest()" style="display: none;"> ✅ Завершить тест и узнать результат </button></div></div><div id="testing-results" class="testing-page" style="display: none;"><h4 id="results-title"></h4><div id="results-content"></div><div class="mt-3"><button class="btn btn-primary btn-lg" onclick="testingNavigate('subjects')">🔄 Новый тест</button><button class="btn btn-outline-secondary" onclick="testingNavigate('difficulty')">🔁 Повторить тему</button></div></div></div></div></div><style>.testing-page { will-change: opacity;}.difficulty-card { transition: transform 0.15s ease, box-shadow 0.15s ease; cursor: pointer;}.difficulty-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15);}.question-card { transition: border-color 0.1s ease; border-left: 4px solid transparent;}.question-card.answered { border-left-color: #28a745;}.result-card.correct { border-left: 4px solid #28a745; background-color: rgba(40, 167, 69, 0.1);}.result-card.incorrect { border-left: 4px solid #dc3545; background-color: rgba(220, 53, 69, 0.1);}.test-input { font-family: 'Consolas', 'Monaco', monospace; font-size: 1.1em;}#test-progress { transition: width 0.2s ease-out;}</style>
+<div class="card">
+    <div class="card-body">
+        <h2 class="card-title">Система тестирования</h2>
+        
+        <!-- Индикатор загрузки -->
+        <div id="testing-loading" class="text-center" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+            <p class="mt-2">Генерация теста...</p>
+        </div>
+        
+        <!-- Ошибки -->
+        <div id="testing-error" class="alert alert-danger" style="display: none;"></div>
+        
+        <!-- Хлебные крошки -->
+        <nav id="testing-breadcrumbs" aria-label="breadcrumb" style="display: none;">
+            <ol class="breadcrumb"></ol>
+        </nav>
+        
+        <!-- Контент тестирования -->
+        <div id="testing-content">
+            
+            <!-- 1. Выбор предмета -->
+            <div id="testing-subjects" class="testing-page">
+                <h4>Выберите предмет для тестирования:</h4>
+                <div class="alert alert-success">
+                    Добро пожаловать в систему тестирования! Выберите предмет и проверьте свои знания!
+                </div>
+                <div class="row" id="testing-subjects-list"></div>
+            </div>
+            
+            <!-- 2. Выбор раздела -->
+            <div id="testing-sections" class="testing-page" style="display: none;">
+                <h4 id="testing-sections-title"></h4>
+                <div class="list-group" id="testing-sections-list"></div>
+            </div>
+            
+            <!-- 3. Выбор темы -->
+            <div id="testing-topics" class="testing-page" style="display: none;">
+                <h4 id="testing-topics-title"></h4>
+                <div class="list-group" id="testing-topics-list"></div>
+            </div>
+            
+            <!-- 4. Выбор сложности и настройки теста -->
+            <div id="testing-difficulty" class="testing-page" style="display: none;">
+                <h4 id="difficulty-title"></h4>
+                
+                <div id="generator-info" class="alert alert-info mb-3" style="display: none;"></div>
+                
+                <!-- Настройки теста -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Настройки теста</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- Тип теста -->
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Тип теста:</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="test_type" 
+                                           id="test_type_with_options" value="with_options" checked>
+                                    <label class="form-check-label" for="test_type_with_options">
+                                        📝 С вариантами ответов
+                                        <small class="text-muted d-block">Выберите правильный вариант из предложенных</small>
+                                    </label>
+                                </div>
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="radio" name="test_type" 
+                                           id="test_type_without_options" value="without_options">
+                                    <label class="form-check-label" for="test_type_without_options">
+                                        ✍️ Без вариантов ответов
+                                        <small class="text-muted d-block">Введите ответ самостоятельно</small>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- Количество вопросов -->
+                            <div class="col-md-6 mb-3">
+                                <label for="num_questions" class="form-label fw-bold">Количество вопросов:</label>
+                                <input type="number" class="form-control" id="num_questions" 
+                                       value="5" min="3" max="20" style="max-width: 120px;">
+                                <small class="text-muted">От 3 до 20 вопросов</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    💡 Совет: Начните с лёгкого уровня, если изучаете тему впервые!
+                </div>
+                
+                <h5 class="mb-3">Выберите уровень сложности:</h5>
+                <div id="difficulty-list"></div>
+            </div>
+            
+            <!-- 5. Прохождение теста -->
+            <div id="testing-test" class="testing-page" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 id="test-title"></h4>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="regenerateTest()">
+                            🔄 Новый тест
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="testingNavigate('topics')">
+                            Другая тема
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="test-info" class="alert alert-secondary mb-3">
+                    <span id="test-type-badge"></span>
+                    <span id="test-generator-badge" class="ms-2"></span>
+                </div>
+                
+                <!-- Прогресс -->
+                <div class="progress mb-3">
+                    <div id="test-progress" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                </div>
+                
+                <!-- Вопросы -->
+                <div id="test-questions"></div>
+                
+                <!-- Кнопка завершения -->
+                <div class="mt-3">
+                    <button id="finish-test-btn" class="btn btn-success btn-lg" 
+                            onclick="finishTest()" style="display: none;">
+                        ✅ Завершить тест и узнать результат
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 6. Результаты -->
+            <div id="testing-results" class="testing-page" style="display: none;">
+                <h4 id="results-title"></h4>
+                <div id="results-content"></div>
+                <div class="mt-3">
+                    <button class="btn btn-primary btn-lg" onclick="testingNavigate('subjects')">
+                        🆕 Новый тест
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="testingNavigate('difficulty')">
+                        🔁 Повторить тему
+                    </button>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+</div>
+
+<!-- Стили для тестирования -->
+<style>
+.testing-page {
+    will-change: opacity;
+}
+
+.difficulty-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    cursor: pointer;
+}
+
+.difficulty-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.question-card {
+    transition: border-color 0.1s ease;
+    border-left: 4px solid transparent;
+}
+
+.question-card.answered {
+    border-left-color: #28a745;
+}
+
+.result-card.correct {
+    border-left: 4px solid #28a745;
+    background-color: rgba(40, 167, 69, 0.1);
+}
+
+.result-card.incorrect {
+    border-left: 4px solid #dc3545;
+    background-color: rgba(220, 53, 69, 0.1);
+}
+
+.test-input {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 1.1em;
+}
+
+#test-progress {
+    transition: width 0.2s ease-out;
+}
+
+.subject-btn {
+    transition: all 0.3s ease;
+    font-size: 1.2rem;
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.subject-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+</style>

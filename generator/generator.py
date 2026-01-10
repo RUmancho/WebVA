@@ -52,3 +52,6 @@ class Algebra:
     @string_handler
     def quadratic_inequality(cls, difficulty):
         return cls.library.quadratic_inequality(difficulty)
+
+
+print(Algebra.quadratic_equation(3)) 

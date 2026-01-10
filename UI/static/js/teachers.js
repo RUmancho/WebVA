@@ -65,7 +65,7 @@ function loadTeachers() {
                     html += `</div></div></div>`;
                 }
                 
-                html += '<button class="btn btn-primary" onclick="autoMatch()">🔄 Запустить автоматическое прикрепление учеников</button>';
+                html += '<button class="btn btn-primary" onclick="autoMatch()">Запустить автоматическое прикрепление учеников</button>';
                 html += '<hr>';
             }
             
