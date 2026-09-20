@@ -1,8 +1,10 @@
-from pathlib import Path
+import os
 
-DATABASE_DIR = Path(__file__).parent.resolve()
-DATABASE_NAME = "users.db"
-DATABASE_PATH = DATABASE_DIR / DATABASE_NAME
-DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
+from project_paths import ensure_data_dirs, get_users_db_path
+
+ensure_data_dirs()
+
+DATABASE_PATH = get_users_db_path()
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATABASE_PATH}")
 SESSION_STATE_KEY = "user_session"
 USER_ROLES = ["Ученик", "Учитель"]

@@ -906,7 +906,9 @@ class CPUTracer:
             print(f"❌ Ошибка экспорта отчета: {e}")
 
 # Глобальный экземпляр трассировщика
-cpu_tracer = CPUTracer()
+from project_paths import get_cpu_tracer_db_path
+
+cpu_tracer = CPUTracer(db_path=str(get_cpu_tracer_db_path()))
 
 # Удобный декоратор для быстрого использования
 def trace_cpu(func=None, **kwargs):

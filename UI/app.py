@@ -13,6 +13,10 @@ load_dotenv(project_root / '.env')
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from project_paths import ensure_data_dirs
+
+ensure_data_dirs()
+
 from database.auth import auth_manager
 from database.database import db
 from bot.theory import theory_manager
@@ -1004,12 +1008,3 @@ def api_formulas_calculate():
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': f'Ошибка вычисления: {str(e)}'}), 500
-
-
-import logging
-
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
-if __name__ == '__main__':
-    app.logger.disabled = True
-    app.run(host='0.0.0.0', port=5000, debug = False)

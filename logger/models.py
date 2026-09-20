@@ -37,11 +37,8 @@ class FunctionMetric(Base):
 
 def get_metrics_db_path():
     """Получить абсолютный путь к базе данных метрик"""
-    from pathlib import Path
-    current_file = Path(__file__).resolve()
-    logger_dir = current_file.parent  # logger/
-    project_root = logger_dir.parent  # E:\Python\Sites\WebVA\
-    return project_root / "logger" / "reports" / "metrics.db"
+    from project_paths import get_metrics_db_path as _get_metrics_db_path
+    return _get_metrics_db_path()
 
 def init_metrics_db(db_path=None, recreate=False):
     """Инициализация базы данных метрик"""

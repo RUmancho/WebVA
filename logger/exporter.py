@@ -30,8 +30,8 @@ class SQLiteMetricExporter(MetricExporter):
     
     def _get_default_db_path(self):
         """Получить путь к БД по умолчанию"""
-        project_root = Path(__file__).resolve().parent.parent
-        return project_root / "logger" / "reports" / "metrics.db"
+        from project_paths import get_metrics_db_path
+        return get_metrics_db_path()
     
     def export(self, metrics_data, timeout_millis=10000, **kwargs):
         """Экспорт метрик в SQLite"""
