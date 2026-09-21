@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import sys
 
@@ -7,22 +9,84 @@ if project_root not in sys.path:
 
 from database.settings import USER_ROLES
 from LibraryManager import loader
+from validator import python_fallback
 
 
 VALIDATOR_DIR = os.path.dirname(os.path.abspath(__file__))
-VALIDATOR_DLL = loader.Library("validator", os.path.join(VALIDATOR_DIR, "validator.h"), VALIDATOR_DIR)
+VALIDATOR_DLL = None
+
+try:
+    VALIDATOR_DLL = loader.Library(
+        "validator",
+        os.path.join(VALIDATOR_DIR, "validator.h"),
+        VALIDATOR_DIR,
+    )
+    print("[Validator] Native library loaded")
+except Exception as e:
+    print(f"[Validator] Native library not available ({e}). Using Python fallback.")
+    VALIDATOR_DLL = None
+
+
+def _use_native(name: str, *args):
+    """Call a native validator function, or None if it is unavailable."""
+    if VALIDATOR_DLL is None:
+        return None
+    try:
+        func = getattr(VALIDATOR_DLL.lib, name)
+        return bool(func(*args))
+    except Exception as e:
+        print(f"[Validator] Native {name} failed ({e}). Using Python fallback.")
+        return None
 
 
 class Validator:
     MIN_PASSWORD_LENGTH = 15
     """Класс для валидации пользовательских данных"""
-    
-    is_name = lambda line: VALIDATOR_DLL.lib.is_name(line)
-    is_email = lambda line: VALIDATOR_DLL.lib.is_email(line)
-    is_password = lambda line, min_len=MIN_PASSWORD_LENGTH: VALIDATOR_DLL.lib.is_password(line, min_len)
-    is_ru_class = lambda line: VALIDATOR_DLL.lib.is_ru_class(line)
-    is_ru_school = lambda line: VALIDATOR_DLL.lib.is_ru_school(line)
-    is_ru_city = lambda line: VALIDATOR_DLL.lib.is_ru_city(line)
+
+    @staticmethod
+    def is_name(line):
+        result = _use_native("is_name", line)
+        if result is not None:
+            return result
+        return python_fallback.is_name(line if line is not None else "")
+
+    @staticmethod
+    def is_email(line):
+        result = _use_native("is_email", line)
+        if result is not None:
+            return result
+        return python_fallback.is_email(line if line is not None else "")
+
+    @staticmethod
+    def is_password(line, min_len=MIN_PASSWORD_LENGTH):
+        # Native is_password often returns False via CFFI (char16_t calling mismatch).
+        # Accept the password if either backend says it is valid.
+        native = _use_native("is_password", line, min_len)
+        fallback = python_fallback.is_password(line if line is not None else "", min_len)
+        if native is True:
+            return True
+        return fallback
+
+    @staticmethod
+    def is_ru_class(line):
+        result = _use_native("is_ru_class", line)
+        if result is not None:
+            return result
+        return python_fallback.is_ru_class(line if line is not None else "")
+
+    @staticmethod
+    def is_ru_school(line):
+        result = _use_native("is_ru_school", line)
+        if result is not None:
+            return result
+        return python_fallback.is_ru_school(line if line is not None else "")
+
+    @staticmethod
+    def is_ru_city(line):
+        result = _use_native("is_ru_city", line)
+        if result is not None:
+            return result
+        return python_fallback.is_ru_city(line if line is not None else "")
     
     @classmethod
     def is_role(cls, role: str):
