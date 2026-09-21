@@ -16,6 +16,8 @@ from flask import session
 from bot.prompt import Prompt
 from bot.prompt_registry import Math
 from bot import chat
+from bot.llm import LlmAccessError, _is_llm_access_error
+from messages.system import LLM_ACCESS_ERROR
 
 PYTHON_FILENAME = "AI"
 
@@ -63,6 +65,10 @@ class ChatBot:
             str: Ответ бота
         """
         try:
+            if self.llm is None or not self.llm.is_available():
+                print("[ERROR] LLM клиент недоступен")
+                return LLM_ACCESS_ERROR
+
             prompt = Prompt(
                 role="Ты дружелюбный AI-помощник по обучению. Отвечай на русском языке, используй Markdown форматирование. НЕ используй LaTeX ($$ или $)!",
                 task=f"Ответь на вопрос пользователя: {user_message}",
@@ -73,9 +79,14 @@ class ChatBot:
             response = self._clean_response(response)
             
             return response if response else self._get_fallback_response(user_message)
-            
+
+        except LlmAccessError as e:
+            print(f"[ERROR] Проблема доступа к LLM: {e}")
+            return e.user_message
         except Exception as e:
             print(f"[ERROR] Ошибка получения ответа бота: {e}")
+            if _is_llm_access_error(e):
+                return LLM_ACCESS_ERROR
             return self._get_fallback_response(user_message)
     
     def _clean_response(self, response: str) -> str:
@@ -143,9 +154,14 @@ class ChatBot:
             return f"Неизвестная тема: {topic}"
         
         try:
+            if self.llm is None or not self.llm.is_available():
+                return LLM_ACCESS_ERROR
             prompt = prompt_factory()
             response = self.llm.ask(prompt)
             return self._clean_response(response)
+        except LlmAccessError as e:
+            print(f"[ERROR] Проблема доступа к LLM: {e}")
+            return e.user_message
         except Exception as e:
             return f"Ошибка генерации теории: {e}"
 

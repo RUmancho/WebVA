@@ -20,6 +20,7 @@ from testing.config import (
     get_generator_type,
     get_dll_method
 )
+from bot.llm import LlmAccessError
 
 
 class GeneratorManager:
@@ -85,6 +86,8 @@ class GeneratorManager:
             result = self._generate_ai_question(subject, section, topic, difficulty)
             if result:
                 return result
+        except LlmAccessError:
+            raise
         except Exception as e:
             print(f"AI генерация вопроса не удалась: {e}")
         
@@ -136,6 +139,8 @@ class GeneratorManager:
             if result and result.get("questions"):
                 print(f"✅ AI успешно сгенерировал {len(result['questions'])} вопросов")
                 return result
+        except LlmAccessError:
+            raise
         except Exception as e:
             print(f"❌ AI генерация не удалась: {e}")
         
@@ -255,6 +260,10 @@ class GeneratorManager:
         """Генерация теста через AI (LLM)"""
         from bot.prompt import Prompt
         from bot import chat
+        from bot.llm import LlmAccessError
+
+        if chat.academic is None or not chat.academic.is_available():
+            raise LlmAccessError("LLM клиент не инициализирован")
         
         difficulty_names = {1: "базовый/лёгкий", 2: "средний", 3: "продвинутый/сложный"}
         diff_name = difficulty_names.get(difficulty, "средний")
@@ -504,6 +513,8 @@ class GeneratorManager:
                 "test_type": "with_options" if with_options else "without_options"
             }
             
+        except LlmAccessError:
+            raise
         except json.JSONDecodeError as e:
             print(f"❌ Ошибка парсинга JSON от AI: {e}")
             print(f"📄 Проблемный ответ (первые 500 символов): {response[:500]}")

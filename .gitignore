@@ -152,9 +152,11 @@ $RECYCLE.BIN/
 
 # Переменные окружения
 .env
+.env copy
 .env.local
 .env.*.local
 *.env
+.env*
 
 # Конфигурации
 config.local.py

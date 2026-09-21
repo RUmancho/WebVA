@@ -41,6 +41,7 @@ AI_PROCESSING_ERROR = "Произошла ошибка при обработке
 AI_PROMPT_ERROR = "Ошибка формирования промпта в LLM"
 AI_TASK_GENERATION_ERROR = "Не удалось сгенерировать задачу"
 AI_TASK_SANITIZATION_ERROR = "Ошибка санитизации текста задачи в LLM"
+LLM_ACCESS_ERROR = "Sorry, there is a problem with LLM access."
 
 # Ошибки Ollama
 OLLAMA_CLIENT_UNAVAILABLE = "Ollama клиент недоступен. Проверьте настройки."

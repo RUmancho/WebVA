@@ -1,7 +1,7 @@
 """
 Модуль чата с LLM.
 Использует LLM сервис и реестр промптов.
-Поддерживает Ollama и OpenAI (gpt-4o-mini).
+Поддерживает OpenRouter, OpenAI и Ollama.
 """
 
 import os
@@ -14,7 +14,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Загрузка .env файла из корня проекта
-load_dotenv(Path(project_root) / '.env')
+load_dotenv(Path(project_root) / '.env', override=True)
 
 from bot.llm import AcademicLLM
 from bot.prompt_registry import Math
@@ -27,8 +27,9 @@ PYTHON_FILENAME = "chat"
 # ========================== НАСТРОЙКИ ==========================
 
 # Выбор провайдера LLM (можно переключать через .env)
-# Варианты: "ollama", "openai"
+# Варианты: "openrouter", "openai", "ollama"
 LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'openai').lower()
+ACTIVE_LLM_PROVIDER = LLM_PROVIDER
 
 # Настройки Ollama
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'deepseek-r1:7b')
@@ -39,6 +40,19 @@ OLLAMA_PORT = int(os.getenv('OLLAMA_PORT', '11434'))
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
 
+# Настройки OpenRouter (OpenAI-compatible API)
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '') or OPENAI_API_KEY
+OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'openrouter/free')
+OPENROUTER_BASE_URL = os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
+OPENROUTER_FALLBACK_MODELS = [
+    model.strip()
+    for model in os.getenv(
+        'OPENROUTER_FALLBACK_MODELS',
+        'nvidia/nemotron-3.5-lightning:free,z-ai/glm-5.2:free,liquid/lfm-2.5-2.6b:free',
+    ).split(',')
+    if model.strip() and model.strip() != OPENROUTER_MODEL
+][:3]
+
 # Общие настройки
 NUM_THREADS = 1
 TEMPERATURE = float(os.getenv('LLM_TEMPERATURE', '0.0'))
@@ -48,42 +62,92 @@ TEMPERATURE = float(os.getenv('LLM_TEMPERATURE', '0.0'))
 
 def init_llm():
     """Инициализация LLM в зависимости от выбранного провайдера"""
-    
+    global ACTIVE_LLM_PROVIDER
+
+    if LLM_PROVIDER == 'openrouter':
+        ACTIVE_LLM_PROVIDER = 'openrouter'
+        return init_openrouter()
+
     if LLM_PROVIDER == 'openai':
-        # Инициализация OpenAI
-        if not OPENAI_API_KEY:
-            print("[ERROR] OPENAI_API_KEY не установлен! Укажите в .env файле")
-            print("[INFO] Переключаюсь на Ollama...")
-            return init_ollama()
-        
-        try:
-            from langchain_openai import ChatOpenAI
-            
-            print(f"[INFO] Инициализация OpenAI: {OPENAI_MODEL}")
-            return AcademicLLM(
-                ChatOpenAI,
-                OPENAI_MODEL,
-                api_key=OPENAI_API_KEY,
-                temperature=TEMPERATURE,
-                max_tokens=2000
-            )
-        except ImportError:
-            print("[ERROR] langchain-openai не установлен!")
-            print("[INFO] Установите: pip install langchain-openai")
-            print("[INFO] Переключаюсь на Ollama...")
-            return init_ollama()
-        except Exception as e:
-            print(f"[ERROR] Ошибка инициализации OpenAI: {e}")
-            print("[INFO] Переключаюсь на Ollama...")
-            return init_ollama()
-    
-    else:
-        # Инициализация Ollama (по умолчанию)
+        ACTIVE_LLM_PROVIDER = 'openai'
+        return init_openai()
+
+    ACTIVE_LLM_PROVIDER = 'ollama'
+    return init_ollama()
+
+
+def init_openrouter():
+    """Инициализация OpenRouter через OpenAI-совместимый API."""
+    if not OPENROUTER_API_KEY:
+        print("[ERROR] OpenRouter key is not set. Put it in OPENROUTER_API_KEY or OPENAI_API_KEY in .env")
+        return None
+
+    try:
+        from langchain_openai import ChatOpenAI
+
+        print(f"[INFO] Инициализация OpenRouter: {OPENROUTER_MODEL}")
+        if OPENROUTER_FALLBACK_MODELS:
+            print(f"[INFO] OpenRouter fallbacks: {', '.join(OPENROUTER_FALLBACK_MODELS)}")
+
+        extra_body = {}
+        if OPENROUTER_FALLBACK_MODELS:
+            extra_body['models'] = OPENROUTER_FALLBACK_MODELS
+
+        return AcademicLLM(
+            ChatOpenAI,
+            OPENROUTER_MODEL,
+            api_key=OPENROUTER_API_KEY,
+            base_url=OPENROUTER_BASE_URL,
+            temperature=TEMPERATURE,
+            max_tokens=2000,
+            extra_body=extra_body or None,
+            default_headers={
+                "HTTP-Referer": "http://localhost:5000",
+                "X-OpenRouter-Title": "WebVA",
+            },
+        )
+    except ImportError:
+        print("[ERROR] langchain-openai не установлен!")
+        print("[INFO] Установите: pip install langchain-openai")
+        return None
+    except Exception as e:
+        print(f"[ERROR] Ошибка инициализации OpenRouter: {e}")
+        return None
+
+
+def init_openai():
+    """Инициализация OpenAI"""
+    if not OPENAI_API_KEY:
+        print("[ERROR] OPENAI_API_KEY не установлен! Укажите в .env файле")
+        print("[INFO] Переключаюсь на Ollama...")
+        return init_ollama()
+
+    try:
+        from langchain_openai import ChatOpenAI
+
+        print(f"[INFO] Инициализация OpenAI: {OPENAI_MODEL}")
+        return AcademicLLM(
+            ChatOpenAI,
+            OPENAI_MODEL,
+            api_key=OPENAI_API_KEY,
+            temperature=TEMPERATURE,
+            max_tokens=2000
+        )
+    except ImportError:
+        print("[ERROR] langchain-openai не установлен!")
+        print("[INFO] Установите: pip install langchain-openai")
+        print("[INFO] Переключаюсь на Ollama...")
+        return init_ollama()
+    except Exception as e:
+        print(f"[ERROR] Ошибка инициализации OpenAI: {e}")
+        print("[INFO] Переключаюсь на Ollama...")
         return init_ollama()
 
 
 def init_ollama():
     """Инициализация Ollama LLM"""
+    global ACTIVE_LLM_PROVIDER
+    ACTIVE_LLM_PROVIDER = 'ollama'
     try:
         import langchain_ollama
         
@@ -107,7 +171,7 @@ def init_ollama():
 academic = init_llm()
 
 if academic and academic.is_available():
-    print(f"[SUCCESS] LLM инициализирован: {LLM_PROVIDER.upper()}")
+    print(f"[SUCCESS] LLM инициализирован: {ACTIVE_LLM_PROVIDER.upper()} ({academic.model})")
 else:
     print("[ERROR] LLM не инициализирован!")
 

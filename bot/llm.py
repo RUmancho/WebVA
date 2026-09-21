@@ -13,11 +13,75 @@ if project_root not in sys.path:
 
 from bot.prompt import Prompt
 from logger import console
+from messages.system import LLM_ACCESS_ERROR
 
 from logger.tracer import trace
 
 
 PYTHON_FILENAME = "llm"
+
+
+class LlmAccessError(Exception):
+    """Invalid API key, auth failure, or LLM provider unreachable."""
+
+    def __init__(self, detail: str = "") -> None:
+        self.detail = detail
+        self.user_message = LLM_ACCESS_ERROR
+        super().__init__(detail or LLM_ACCESS_ERROR)
+
+
+def _is_llm_access_error(exc: BaseException) -> bool:
+    """True when the provider rejected the key or the API could not be reached."""
+    try:
+        import openai
+
+        access_types = (
+            openai.AuthenticationError,
+            openai.APIConnectionError,
+            openai.APITimeoutError,
+            openai.PermissionDeniedError,
+            openai.RateLimitError,
+        )
+        if isinstance(exc, access_types):
+            return True
+        if isinstance(exc, openai.APIStatusError):
+            status_code = getattr(exc, "status_code", None)
+            if status_code in (401, 402, 403, 429, 500, 502, 503):
+                return True
+    except Exception as e:
+        print(f"[ERROR] Could not import OpenAI exception types: {e}")
+
+    text = str(exc).lower()
+    markers = (
+        "incorrect api key",
+        "invalid api key",
+        "invalid_api_key",
+        "authentication",
+        "unauthorized",
+        "permission denied",
+        "error code: 401",
+        "error code: 403",
+        "error code: 402",
+        "payment required",
+        "insufficient credits",
+        "connection error",
+        "connecterror",
+        "connection refused",
+        "connection timed out",
+        "timeout",
+        "apiconnectionerror",
+        "could not connect",
+        "name or service not known",
+        "max retries exceeded",
+        "ssl",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _raise_if_access_error(exc: BaseException) -> None:
+    if _is_llm_access_error(exc):
+        print(f"[ERROR] LLM access problem: {exc}")
+        raise LlmAccessError(str(exc)) from exc
 
 
 class LLM:
@@ -60,7 +124,7 @@ class LLM:
         """
         if not self.client:
             print("[ERROR] LLM клиент не инициализирован")
-            return ""
+            raise LlmAccessError("LLM client is not initialized")
         
         try:
             prompt_text = prompt.build()
@@ -82,10 +146,13 @@ class LLM:
                 response = self.client.invoke(prompt_text)
                 return str(response) if response else ""
                 
+        except LlmAccessError:
+            raise
         except Exception as e:
             print(f"[ERROR] Ошибка при запросе к LLM: {e}")
             import traceback
             traceback.print_exc()
+            _raise_if_access_error(e)
             return ""
     
     @trace
@@ -101,7 +168,7 @@ class LLM:
         """
         if not self.client:
             print("[ERROR] LLM клиент не инициализирован")
-            return ""
+            raise LlmAccessError("LLM client is not initialized")
         
         try:
             client_type = type(self.client).__name__
@@ -119,10 +186,13 @@ class LLM:
                 response = self.client.invoke(prompt_text)
                 return str(response) if response else ""
                 
+        except LlmAccessError:
+            raise
         except Exception as e:
             print(f"[ERROR] Ошибка при запросе к LLM: {e}")
             import traceback
             traceback.print_exc()
+            _raise_if_access_error(e)
             return ""
     
     @trace

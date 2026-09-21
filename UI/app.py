@@ -8,7 +8,7 @@ current_file = Path(__file__).resolve()
 project_root = current_file.parent.parent
 
 # Загрузка .env файла из корня проекта
-load_dotenv(project_root / '.env')
+load_dotenv(project_root / '.env', override=True)
 
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
@@ -21,6 +21,8 @@ from database.auth import auth_manager
 from database.database import db
 from bot.theory import theory_manager
 from bot.testing import testing_manager
+from bot.llm import LlmAccessError
+from messages.system import LLM_ACCESS_ERROR
 
 PYTHON_FILENAME = "app"
 
@@ -350,6 +352,8 @@ def api_theory_explanation():
         
         # Получаем объяснение через LLM
         explanation = theory_manager.get_topic_explanation(subject, section, topic, regenerate=regenerate)
+        if explanation == LLM_ACCESS_ERROR:
+            return jsonify({'error': LLM_ACCESS_ERROR}), 503
         
         # Преобразуем Markdown в HTML
         try:
@@ -366,6 +370,8 @@ def api_theory_explanation():
             'explanation': explanation_html
         })
         
+    except LlmAccessError as e:
+        return jsonify({'error': e.user_message}), 503
     except Exception as e:
         return jsonify({'error': f'Ошибка генерации: {str(e)}'}), 500
 
@@ -517,6 +523,9 @@ def api_testing_generate_test():
         # Генерируем тест
         test = testing_manager.generate_test(subject, section, topic, difficulty, test_type, num_questions)
         
+        if test and test.get('error'):
+            return jsonify({'error': test['error']}), 503
+
         if not test or not test.get('questions'):
             return jsonify({'error': 'Не удалось сгенерировать тест'}), 500
         
@@ -525,6 +534,8 @@ def api_testing_generate_test():
         session.modified = True
         
         return jsonify({'test': test})
+    except LlmAccessError as e:
+        return jsonify({'error': e.user_message}), 503
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

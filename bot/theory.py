@@ -15,7 +15,8 @@ if project_root not in sys.path:
 
 from flask import session as flask_session
 from bot.prompt import Prompt
-from bot import chat  
+from bot import chat
+from bot.llm import LlmAccessError
 from bot import topics
 from logger import console
 
@@ -138,6 +139,9 @@ class TheoryManager:
                 return explanation
             else:
                 print(f"[WARN] Объяснение слишком короткое: {len(explanation) if explanation else 0} символов")
+        except LlmAccessError as e:
+            print(f"[ERROR] Проблема доступа к LLM: {e}")
+            return e.user_message
         except Exception as e:
             print(f"[ERROR] Ошибка генерации через LLM: {e}")
             import traceback
@@ -159,8 +163,8 @@ class TheoryManager:
         """Генерация объяснения через LLM из chat.py"""
         
         # Проверяем доступность LLM
-        if not chat.academic.is_available():
-            raise RuntimeError("LLM клиент не инициализирован. Проверьте, что Ollama запущен: ollama serve")
+        if chat.academic is None or not chat.academic.is_available():
+            raise LlmAccessError("LLM клиент не инициализирован")
         
         ctx = SUBJECT_CONTEXTS.get(subject, {"style": "образовательный", "focus": "ключевые понятия", "examples": "примеры"})
         
@@ -194,6 +198,8 @@ class TheoryManager:
         # Используем готовый LLM из chat.py
         try:
             response = chat.academic.ask(prompt)
+        except LlmAccessError:
+            raise
         except Exception as e:
             raise RuntimeError(f"Ошибка при обращении к LLM: {e}")
         

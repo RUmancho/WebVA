@@ -15,6 +15,7 @@ if project_root not in sys.path:
 
 from flask import session as flask_session
 from bot import topics
+from bot.llm import LlmAccessError
 from logger import console
 from testing.generator_manager import generator_manager
 
@@ -241,6 +242,9 @@ class TestingManager:
             # Fallback на локальную генерацию
             return self._generate_local_test(subject, section, topic, difficulty, num_questions, with_options)
                 
+        except LlmAccessError as e:
+            print(f"[ERROR] Проблема доступа к LLM: {e}")
+            return {'error': e.user_message, 'questions': []}
         except Exception as e:
             return self._generate_local_test(subject, section, topic, difficulty, 
                                              num_questions or DEFAULT_NUM_QUESTIONS, 
